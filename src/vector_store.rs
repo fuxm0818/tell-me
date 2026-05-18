@@ -65,6 +65,10 @@ pub struct VectorStore {
     db_path: PathBuf,
     /// 文件状态映射（缓存）
     file_status: HashMap<String, FileMetadata>,
+    /// 流式处理模式下的临时向量数据
+    streaming_embeddings: Vec<Vec<f32>>,
+    /// 流式处理模式下的临时元数据条目
+    streaming_metadata: Vec<MetadataEntry>,
 }
 
 impl VectorStore {
@@ -76,6 +80,8 @@ impl VectorStore {
         let mut store = Self {
             db_path: db_path.to_path_buf(),
             file_status: HashMap::new(),
+            streaming_embeddings: Vec::new(),
+            streaming_metadata: Vec::new(),
         };
         // 加载文件状态缓存
         store.load_file_status();
@@ -92,6 +98,7 @@ impl VectorStore {
     }
 
     /// 计算文件的 SHA256 哈希值
+    #[allow(dead_code)]
     pub fn compute_file_hash(file_path: &Path) -> anyhow::Result<String> {
         let content = fs::read(file_path)?;
         let hash = sha256::digest(&content);
@@ -99,6 +106,7 @@ impl VectorStore {
     }
 
     /// 获取文件的最后修改时间（Unix 时间戳）
+    #[allow(dead_code)]
     fn get_file_modified_time(file_path: &Path) -> anyhow::Result<u64> {
         let metadata = fs::metadata(file_path)?;
         let modified = metadata.modified()?;
@@ -106,12 +114,14 @@ impl VectorStore {
     }
 
     /// 获取文件大小
+    #[allow(dead_code)]
     fn get_file_size(file_path: &Path) -> anyhow::Result<u64> {
         let metadata = fs::metadata(file_path)?;
         Ok(metadata.len())
     }
 
     /// 创建文件元数据
+    #[allow(dead_code)]
     pub fn create_file_metadata(file_path: &Path) -> anyhow::Result<FileMetadata> {
         Ok(FileMetadata {
             file_path: file_path.to_string_lossy().to_string(),
@@ -143,6 +153,7 @@ impl VectorStore {
     ///
     /// # 错误
     /// 当目录创建失败或文件写入失败时返回错误
+    #[allow(dead_code)]
     pub fn rebuild(
         &self,
         chunks: &[TextChunk],
@@ -198,6 +209,80 @@ impl VectorStore {
 
         let metadata_json = serde_json::to_string_pretty(&store_metadata)?;
         fs::write(self.metadata_path(), metadata_json)?;
+
+        Ok(())
+    }
+
+    /// 流式添加文本块（增量模式）
+    ///
+    /// 在流式处理模式下，将文本块及其向量添加到临时缓冲区。
+    /// 需要调用 complete_rebuild() 来完成最终持久化。
+    ///
+    /// # 参数
+    /// - `chunks`: 文本块列表
+    /// - `embeddings`: 对应的向量列表
+    ///
+    /// # 返回
+    /// 成功返回 Ok(())，失败返回错误
+    pub fn add_chunks(
+        &mut self,
+        chunks: &[TextChunk],
+        embeddings: &[Vec<f32>],
+    ) -> anyhow::Result<()> {
+        // 确保目录存在
+        fs::create_dir_all(&self.db_path)?;
+
+        // 将向量添加到临时缓冲区
+        self.streaming_embeddings.extend_from_slice(embeddings);
+
+        // 构建元数据条目并添加到临时缓冲区
+        for (chunk, _embedding) in chunks.iter().zip(embeddings.iter()) {
+            let metadata_entry = MetadataEntry {
+                content: chunk.content.clone(),
+                source_file: chunk.source_file.clone(),
+                chunk_index: chunk.chunk_index,
+                file_hash: String::new(), // 流式模式下暂时留空，complete_rebuild 时补充
+            };
+            self.streaming_metadata.push(metadata_entry);
+        }
+
+        Ok(())
+    }
+
+    /// 完成流式重建
+    ///
+    /// 将临时缓冲区中的数据持久化到磁盘，并清理临时数据。
+    ///
+    /// # 返回
+    /// 成功返回 Ok(())，失败返回错误
+    pub fn complete_rebuild(&mut self) -> anyhow::Result<()> {
+        // 确保目录存在
+        fs::create_dir_all(&self.db_path)?;
+
+        // 如果没有数据，清空现有文件
+        if self.streaming_embeddings.is_empty() {
+            // 删除现有文件
+            let _ = fs::remove_file(self.embeddings_path());
+            let _ = fs::remove_file(self.metadata_path());
+            return Ok(());
+        }
+
+        // 序列化向量数据为 bincode 格式
+        let encoded = bincode::serialize(&self.streaming_embeddings)?;
+        fs::write(self.embeddings_path(), encoded)?;
+
+        // 构建完整的存储元数据
+        let store_metadata = StoreMetadata {
+            version: 2,
+            entries: std::mem::take(&mut self.streaming_metadata),
+            file_status: HashMap::new(), // 流式模式不维护文件状态
+        };
+
+        let metadata_json = serde_json::to_string_pretty(&store_metadata)?;
+        fs::write(self.metadata_path(), metadata_json)?;
+
+        // 清空临时缓冲区
+        self.streaming_embeddings.clear();
 
         Ok(())
     }

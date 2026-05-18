@@ -76,6 +76,7 @@ pub struct ChunkSplitter {
 }
 
 impl ChunkSplitter {
+    #[allow(dead_code)]
     pub fn new(chunk_size: usize, overlap: usize) -> Self {
         Self {
             default_chunk_size: chunk_size,
@@ -106,6 +107,12 @@ impl ChunkSplitter {
         map.insert("xls", 256);
         map.insert("pdf", 384);
         map.insert("csv", 256);
+        map.insert("rtf", 512);
+        map.insert("pptx", 512);
+        map.insert("ppt", 512);
+        map.insert("wps", 512);
+        map.insert("et", 256);
+        map.insert("dps", 512);
         map
     }
 
@@ -120,6 +127,12 @@ impl ChunkSplitter {
         map.insert("xls", 32);
         map.insert("pdf", 48);
         map.insert("csv", 32);
+        map.insert("rtf", 64);
+        map.insert("pptx", 64);
+        map.insert("ppt", 64);
+        map.insert("wps", 64);
+        map.insert("et", 32);
+        map.insert("dps", 64);
         map
     }
 

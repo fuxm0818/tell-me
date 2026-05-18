@@ -116,6 +116,7 @@ impl FQAStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn search(&self, query_embedding: &[f32], top_k: usize) -> Vec<FQASearchResult> {
         self.search_with_config(query_embedding, &FQASearchConfig {
             top_k,

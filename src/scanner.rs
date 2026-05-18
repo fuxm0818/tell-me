@@ -9,7 +9,9 @@ use walkdir::WalkDir;
 const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024;
 
 /// 支持的文档扩展名列表
-const SUPPORTED_EXTENSIONS: &[&str] = &["txt", "md", "pdf", "docx", "doc", "xlsx", "xls", "csv"];
+const SUPPORTED_EXTENSIONS: &[&str] = &[
+    "txt", "md", "pdf", "docx", "doc", "xlsx", "xls", "csv", "rtf", "pptx", "ppt", "wps", "et", "dps",
+];
 
 /// 文档扫描器
 /// 负责递归遍历目录，筛选出支持格式的文档文件
@@ -430,7 +432,7 @@ mod tests {
     fn test_default_trait() {
         // 测试 Default trait 实现
         let scanner = DocumentScanner::default();
-        assert_eq!(scanner.supported_extensions.len(), 8);
+        assert_eq!(scanner.supported_extensions.len(), 11);
         assert_eq!(scanner.max_file_size, MAX_FILE_SIZE);
     }
 
