@@ -37,21 +37,29 @@ which coi 2>/dev/null || ls ~/.local/bin/coi 2>/dev/null || ls /usr/local/bin/co
 
 ### 第 2 步：从 Skill 自带的 bin/ 目录安装
 
-本 Skill 已内置编译好的可执行文件，无需下载。根据当前操作系统，从 Skill 的 `bin/` 目录复制到用户的 PATH 中：
+本 Skill 已内置编译好的可执行文件，无需下载。先检测当前操作系统，然后复制对应的程序：
+
+```bash
+# 检测操作系统并选择对应程序
+OS="$(uname -s)"
+case "$OS" in
+    Darwin) BIN_NAME="coi-macos" ;;
+    Linux)  BIN_NAME="coi-linux" ;;
+    *)      BIN_NAME="" ;;
+esac
+```
+
+**bin/ 目录中的文件对应关系：**
+- `coi-macos` → macOS（Intel 和 M 芯片通用）
+- `coi-windows.exe` → Windows
 
 **macOS / Linux：**
 ```bash
-# 获取 skill 中 bin 目录的路径（相对于本 SKILL.md 文件）
 SKILL_DIR="$(dirname "<本SKILL.md的绝对路径>")"
-
 mkdir -p ~/.local/bin
-
-# macOS
-cp "$SKILL_DIR/bin/coi-macos" ~/.local/bin/coi
+cp "$SKILL_DIR/bin/$BIN_NAME" ~/.local/bin/coi
 chmod +x ~/.local/bin/coi
-xattr -d com.apple.quarantine ~/.local/bin/coi 2>/dev/null
-
-# 验证
+xattr -d com.apple.quarantine ~/.local/bin/coi 2>/dev/null  # macOS 需要
 ~/.local/bin/coi --help
 ```
 

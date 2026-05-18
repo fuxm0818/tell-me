@@ -1,0 +1,132 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-macos:
+    name: Build macOS Universal
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+
+      - name: Build ARM
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Build Intel
+        run: cargo build --release --target x86_64-apple-darwin
+
+      - name: Create Universal Binary
+        run: |
+          lipo -create \
+            target/aarch64-apple-darwin/release/coi \
+            target/x86_64-apple-darwin/release/coi \
+            -output coi-macos
+          chmod +x coi-macos
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coi-macos
+          path: coi-macos
+
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coi-windows
+          path: target/x86_64-pc-windows-msvc/release/coi.exe
+
+  build-linux:
+    name: Build Linux x64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Build
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coi-linux
+          path: target/x86_64-unknown-linux-gnu/release/coi
+
+  release:
+    name: Create Release
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          cp dist/coi-macos/coi-macos release/coi-macos
+          cp dist/coi-windows/coi.exe release/coi-windows.exe
+          cp dist/coi-linux/coi release/coi-linux
+          chmod +x release/*
+
+      - name: Get tag name
+        id: tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ env.TAG_NAME }}
+          body: |
+            COI - 我问你答：本地离线文档问答工具
+
+            **更新说明：**
+            - 请在此处添加更新内容
+
+            **下载：**
+            - macOS (Intel/M芯片通用): `coi-macos`
+            - Windows x64: `coi-windows.exe`
+            - Linux x64: `coi-linux`
+
+            **使用方法：**
+            ```bash
+            # 初始化知识库
+            ./coi-macos init /path/to/your/documents
+
+            # 提问
+            ./coi-macos ask "你的问题"
+            ```
+          files: |
+            release/coi-macos
+            release/coi-windows.exe
+            release/coi-linux
+          draft: false
+          prerelease: false
