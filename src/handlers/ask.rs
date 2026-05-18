@@ -1,13 +1,34 @@
 // ask 命令处理器
 // 提问查询：直接检索已有向量库，不重建
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::config::ConfigStore;
 use crate::embedding::EmbeddingService;
 use crate::error::CoiError;
-use crate::fqa_store::FQAStore;
+use crate::fqa_store::{FQAStore, FQASearchConfig};
 use crate::vector_store::VectorStore;
+
+/// 统一的搜索结果类型
+#[derive(Debug, Clone)]
+enum SearchResult {
+    Document {
+        content: String,
+        source_file: String,
+        score: f32,
+    },
+    FQA {
+        question: String,
+        answer: String,
+        score: f32,
+    },
+}
+
+/// 打印带前缀的信息
+fn print_info(message: &str) {
+    println!("[COI] {}", message);
+}
 
 /// 处理 ask 命令
 ///
@@ -15,9 +36,9 @@ use crate::vector_store::VectorStore;
 /// 1. 验证问题非空白
 /// 2. 加载配置，验证已初始化
 /// 3. 检查向量库是否存在
-/// 4. 向量化用户问题，检索 Top 5
-/// 5. FQA 语义匹配 Top 3
-/// 6. 分区展示结果
+/// 4. 向量化用户问题，检索 Top 15
+/// 5. FQA 语义匹配（带相似度阈值过滤，默认0.85）
+/// 6. 双源合并展示结果（按相似度排序）
 ///
 /// # 参数
 /// - `question`: 用户提问内容
@@ -60,58 +81,75 @@ pub fn handle_ask(question: &str, data_dir: &Path) -> Result<(), CoiError> {
         .unwrap_or(Path::new("."))
         .join("model");
 
+    print_info(&format!("正在检索: {}", trimmed_question));
+    
     let embedding_service = EmbeddingService::new(&model_dir)?;
     let query_embedding = embedding_service.encode(trimmed_question)?;
 
-    // 5. 检索向量库 Top 5
+    // 5. 检索向量库 Top 15（与Python版本保持一致）
     let doc_results = vector_store
-        .query(&query_embedding, 5)
+        .query(&query_embedding, 15)
         .map_err(|e| CoiError::Other(e))?;
 
-    // 6. FQA 语义匹配 Top 3
+    // 6. FQA 语义匹配（带相似度阈值过滤，默认0.85）
     let fqa_path = data_dir.join("fqa.json");
     let fqa_results = if fqa_path.exists() {
         let fqa_store = FQAStore::new(&fqa_path).map_err(|e| CoiError::Other(e))?;
-        fqa_store.search(&query_embedding, 3)
+        let config = FQASearchConfig {
+            top_k: 3,
+            similarity_threshold: 0.85,
+            enable_threshold: true,
+        };
+        fqa_store.search_with_config(&query_embedding, &config)
     } else {
         Vec::new()
     };
 
-    // 7. 分区展示结果
-    let has_doc_results = !doc_results.is_empty();
-    let has_fqa_results = !fqa_results.is_empty();
+    println!();
 
-    if !has_doc_results && !has_fqa_results {
-        println!("未找到相关答案");
-        return Ok(());
-    }
+    let mut has_output = false;
 
-    // 显示文档检索结果
-    if has_doc_results {
-        println!("📄 文档检索结果：");
-        for (i, result) in doc_results.iter().enumerate() {
-            println!(
-                "  [{}] (来源: {}, 相似度: {:.2})",
-                i + 1,
-                result.source_file,
-                result.score
-            );
-            let display_content = truncate_content(&result.content, 200);
-            println!("      {}", display_content);
+    // 7. FQA 部分输出（参考Python版本格式）
+    if !fqa_results.is_empty() {
+        has_output = true;
+        println!("═══ 标准答案（FQA）═══");
+        for result in &fqa_results {
+            println!("  相似度: {:.2}", result.score);
+            println!("  问题: {}", result.question);
+            println!("  答案: {}", result.answer);
         }
+        println!();
     }
 
-    // 显示标准答案结果
-    if has_fqa_results {
-        if has_doc_results {
+    // 8. 文档检索部分输出（按文件分组显示，参考Python版本）
+    if !doc_results.is_empty() {
+        has_output = true;
+        println!("═══ 文档检索结果 ═══");
+        
+        // 按文件分组
+        let mut grouped: HashMap<String, Vec<(f32, String)>> = HashMap::new();
+        for result in &doc_results {
+            grouped
+                .entry(result.source_file.clone())
+                .or_insert_with(Vec::new)
+                .push((result.score, result.content.clone()));
+        }
+
+        for (file_path, chunks) in grouped {
+            println!("  📄 {}", file_path);
+            println!("     ({} 个相关片段)", chunks.len());
+            for (score, content) in chunks {
+                let preview = truncate_content(&content, 400);
+                println!("     • 相似度 {:.2}: {}", score, preview);
+            }
             println!();
         }
-        println!("💡 标准答案：");
-        for (i, result) in fqa_results.iter().enumerate() {
-            println!("  [{}] 问题: {}", i + 1, result.question);
-            println!("      答案: {}", result.answer);
-            println!("      (相似度: {:.2})", result.score);
-        }
+    }
+
+    // 9. 无结果提示
+    if !has_output {
+        print_info("未找到相关内容。");
+        print_info("提示: 可能需要重新执行 'coi init' 更新向量库。");
     }
 
     Ok(())

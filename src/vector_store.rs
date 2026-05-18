@@ -1,15 +1,21 @@
 // 向量存储模块
 // 使用 ndarray 实现余弦相似度检索
 // 向量数据以 bincode 序列化持久化，元数据以 JSON 格式存储
+// 支持文件哈希记录用于变更检测和增量更新
 
 use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::splitter::TextChunk;
 
+/// 文件哈希算法类型
+const HASH_ALGORITHM: &str = "sha256";
+
 /// 检索结果结构体
+#[derive(Debug, Clone)]
 pub struct SearchResult {
     /// 文本内容
     pub content: String,
@@ -21,6 +27,19 @@ pub struct SearchResult {
     pub score: f32,
 }
 
+/// 文件元数据，记录文件状态用于变更检测
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct FileMetadata {
+    /// 文件路径
+    pub file_path: String,
+    /// 文件哈希值（SHA256）
+    pub file_hash: String,
+    /// 文件最后修改时间（Unix 时间戳）
+    pub modified_at: u64,
+    /// 文件大小（字节）
+    pub file_size: u64,
+}
+
 /// 元数据条目，用于序列化/反序列化
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct MetadataEntry {
@@ -30,12 +49,40 @@ struct MetadataEntry {
     source_file: String,
     /// 块序号
     chunk_index: usize,
+    /// 来源文件哈希
+    file_hash: String,
+}
+
+/// 向量存储元数据文件结构
+#[derive(Serialize, Deserialize, Debug)]
+struct StoreMetadata {
+    /// 版本号
+    version: u32,
+    /// 元数据条目列表
+    entries: Vec<MetadataEntry>,
+    /// 文件状态映射（文件路径 -> 文件元数据）
+    file_status: HashMap<String, FileMetadata>,
+}
+
+/// 增量更新结果
+#[derive(Debug)]
+pub struct IncrementalUpdateResult {
+    /// 新增的文件数量
+    pub added_files: usize,
+    /// 修改的文件数量
+    pub modified_files: usize,
+    /// 删除的文件数量
+    pub deleted_files: usize,
+    /// 未变更的文件数量
+    pub unchanged_files: usize,
 }
 
 /// 向量存储，管理向量数据的持久化和检索
 pub struct VectorStore {
     /// 向量数据库目录路径
     db_path: PathBuf,
+    /// 文件状态映射（缓存）
+    file_status: HashMap<String, FileMetadata>,
 }
 
 impl VectorStore {
@@ -44,9 +91,81 @@ impl VectorStore {
     /// # 参数
     /// - `db_path`: 向量数据库目录路径（如 coi_data/vector_db/）
     pub fn new(db_path: &Path) -> Self {
-        Self {
+        let mut store = Self {
             db_path: db_path.to_path_buf(),
+            file_status: HashMap::new(),
+        };
+        // 加载文件状态缓存
+        store.load_file_status();
+        store
+    }
+
+    /// 加载文件状态映射
+    fn load_file_status(&mut self) {
+        if let Ok(metadata_str) = fs::read_to_string(self.metadata_path()) {
+            if let Ok(store_metadata) = serde_json::from_str::<StoreMetadata>(&metadata_str) {
+                self.file_status = store_metadata.file_status;
+            }
         }
+    }
+
+    /// 计算文件的 SHA256 哈希值
+    pub fn compute_file_hash(file_path: &Path) -> anyhow::Result<String> {
+        let content = fs::read(file_path)?;
+        let hash = sha256::digest(&content);
+        Ok(hash)
+    }
+
+    /// 获取文件的最后修改时间（Unix 时间戳）
+    fn get_file_modified_time(file_path: &Path) -> anyhow::Result<u64> {
+        let metadata = fs::metadata(file_path)?;
+        let modified = metadata.modified()?;
+        Ok(modified.duration_since(std::time::UNIX_EPOCH)?.as_secs())
+    }
+
+    /// 获取文件大小
+    fn get_file_size(file_path: &Path) -> anyhow::Result<u64> {
+        let metadata = fs::metadata(file_path)?;
+        Ok(metadata.len())
+    }
+
+    /// 创建文件元数据
+    pub fn create_file_metadata(file_path: &Path) -> anyhow::Result<FileMetadata> {
+        Ok(FileMetadata {
+            file_path: file_path.to_string_lossy().to_string(),
+            file_hash: Self::compute_file_hash(file_path)?,
+            modified_at: Self::get_file_modified_time(file_path)?,
+            file_size: Self::get_file_size(file_path)?,
+        })
+    }
+
+    /// 检查文件是否发生变化
+    pub fn has_file_changed(&self, file_path: &Path) -> anyhow::Result<bool> {
+        let current_metadata = Self::create_file_metadata(file_path)?;
+        if let Some(existing) = self.file_status.get(&current_metadata.file_path) {
+            Ok(existing.file_hash != current_metadata.file_hash)
+        } else {
+            Ok(true) // 文件不存在于存储中，视为新文件（已变化）
+        }
+    }
+
+    /// 获取已处理的文件列表
+    pub fn get_processed_files(&self) -> Vec<String> {
+        self.file_status.keys().cloned().collect()
+    }
+
+    /// 检测文件变更
+    pub fn detect_changes(&self, current_files: &[&Path]) -> Vec<String> {
+        let mut changed_files = Vec::new();
+        for file_path in current_files {
+            let file_path_str = file_path.to_string_lossy().to_string();
+            match self.has_file_changed(file_path) {
+                Ok(true) => changed_files.push(file_path_str),
+                Ok(false) => {}
+                Err(_) => changed_files.push(file_path_str), // 出错时视为需要重新处理
+            }
+        }
+        changed_files
     }
 
     /// 获取 embeddings.bin 文件路径
@@ -59,18 +178,24 @@ impl VectorStore {
         self.db_path.join("metadata.json")
     }
 
-    /// 全量重建向量库
+    /// 全量重建向量库（带文件元数据版本）
     ///
     /// 将向量矩阵以 bincode 序列化存储到 embeddings.bin，
-    /// 元数据存储到 metadata.json。
+    /// 元数据存储到 metadata.json（包含文件哈希信息）。
     ///
     /// # 参数
     /// - `chunks`: 文本块列表
     /// - `embeddings`: 对应的向量列表，与 chunks 一一对应
+    /// - `source_files`: 源文件路径列表（用于生成文件哈希）
     ///
     /// # 错误
     /// 当目录创建失败或文件写入失败时返回错误
-    pub fn rebuild(&self, chunks: &[TextChunk], embeddings: &[Vec<f32>]) -> anyhow::Result<()> {
+    pub fn rebuild(
+        &self,
+        chunks: &[TextChunk],
+        embeddings: &[Vec<f32>],
+        source_files: &[&Path],
+    ) -> anyhow::Result<()> {
         // 确保目录存在
         fs::create_dir_all(&self.db_path)?;
 
@@ -78,17 +203,47 @@ impl VectorStore {
         let encoded = bincode::serialize(embeddings)?;
         fs::write(self.embeddings_path(), encoded)?;
 
-        // 构建元数据列表并序列化为 JSON
-        let metadata: Vec<MetadataEntry> = chunks
+        // 构建文件状态映射
+        let mut file_status: HashMap<String, FileMetadata> = HashMap::new();
+        for file_path in source_files {
+            if let Ok(metadata) = Self::create_file_metadata(file_path) {
+                file_status.insert(metadata.file_path.clone(), metadata);
+            }
+        }
+
+        // 为每个文本块获取文件哈希
+        let mut file_hash_cache: HashMap<String, String> = HashMap::new();
+        for file_path in source_files {
+            if let Ok(hash) = Self::compute_file_hash(file_path) {
+                file_hash_cache.insert(file_path.to_string_lossy().to_string(), hash);
+            }
+        }
+
+        // 构建元数据列表
+        let metadata_entries: Vec<MetadataEntry> = chunks
             .iter()
-            .map(|chunk| MetadataEntry {
-                content: chunk.content.clone(),
-                source_file: chunk.source_file.clone(),
-                chunk_index: chunk.chunk_index,
+            .map(|chunk| {
+                let file_hash = file_hash_cache
+                    .get(&chunk.source_file)
+                    .cloned()
+                    .unwrap_or_default();
+                MetadataEntry {
+                    content: chunk.content.clone(),
+                    source_file: chunk.source_file.clone(),
+                    chunk_index: chunk.chunk_index,
+                    file_hash,
+                }
             })
             .collect();
 
-        let metadata_json = serde_json::to_string_pretty(&metadata)?;
+        // 构建完整的存储元数据
+        let store_metadata = StoreMetadata {
+            version: 2,
+            entries: metadata_entries,
+            file_status,
+        };
+
+        let metadata_json = serde_json::to_string_pretty(&store_metadata)?;
         fs::write(self.metadata_path(), metadata_json)?;
 
         Ok(())
@@ -118,9 +273,18 @@ impl VectorStore {
         let embeddings_data = fs::read(self.embeddings_path())?;
         let embeddings: Vec<Vec<f32>> = bincode::deserialize(&embeddings_data)?;
 
-        // 加载元数据
+        // 加载元数据（支持新格式和旧格式）
         let metadata_data = fs::read_to_string(self.metadata_path())?;
-        let metadata: Vec<MetadataEntry> = serde_json::from_str(&metadata_data)?;
+        let metadata: Vec<MetadataEntry> = match serde_json::from_str::<StoreMetadata>(&metadata_data) {
+            Ok(store_metadata) => {
+                // 新格式：包含 file_status
+                store_metadata.entries
+            }
+            Err(_) => {
+                // 旧格式：直接是 MetadataEntry 数组
+                serde_json::from_str(&metadata_data)?
+            }
+        };
 
         // 空数据直接返回
         if embeddings.is_empty() || metadata.is_empty() {
@@ -210,16 +374,19 @@ mod tests {
                 content: "Rust 是一门系统编程语言".to_string(),
                 source_file: "docs/rust.md".to_string(),
                 chunk_index: 0,
+                token_count: 6,
             },
             TextChunk {
                 content: "Python 是一门脚本语言".to_string(),
                 source_file: "docs/python.md".to_string(),
                 chunk_index: 0,
+                token_count: 6,
             },
             TextChunk {
                 content: "向量检索用于语义搜索".to_string(),
                 source_file: "docs/search.md".to_string(),
                 chunk_index: 1,
+                token_count: 6,
             },
         ]
     }
@@ -255,7 +422,7 @@ mod tests {
         let chunks = create_test_chunks();
         let embeddings = create_test_embeddings();
 
-        store.rebuild(&chunks, &embeddings).unwrap();
+        store.rebuild(&chunks, &embeddings, &[]).unwrap();
         assert!(!store.is_empty());
     }
 
@@ -267,7 +434,7 @@ mod tests {
         let chunks: Vec<TextChunk> = vec![];
         let embeddings: Vec<Vec<f32>> = vec![];
 
-        store.rebuild(&chunks, &embeddings).unwrap();
+        store.rebuild(&chunks, &embeddings, &[]).unwrap();
         // bincode 序列化空 Vec 仍有少量字节（长度前缀），所以文件非空
         // 但 query 会返回空结果
         let results = store.query(&[1.0, 0.0, 0.0, 0.0], 5).unwrap();
@@ -282,7 +449,7 @@ mod tests {
         let chunks = create_test_chunks();
         let embeddings = create_test_embeddings();
 
-        store.rebuild(&chunks, &embeddings).unwrap();
+        store.rebuild(&chunks, &embeddings, &[]).unwrap();
 
         assert!(tmp_dir.path().join("embeddings.bin").exists());
         assert!(tmp_dir.path().join("metadata.json").exists());
@@ -296,19 +463,20 @@ mod tests {
         let chunks = create_test_chunks();
         let embeddings = create_test_embeddings();
 
-        store.rebuild(&chunks, &embeddings).unwrap();
+        store.rebuild(&chunks, &embeddings, &[]).unwrap();
 
-        // 验证元数据文件内容
+        // 验证元数据文件内容（新格式）
         let metadata_str = fs::read_to_string(tmp_dir.path().join("metadata.json")).unwrap();
-        let metadata: Vec<MetadataEntry> = serde_json::from_str(&metadata_str).unwrap();
+        let store_metadata: StoreMetadata = serde_json::from_str(&metadata_str).unwrap();
 
-        assert_eq!(metadata.len(), 3);
-        assert_eq!(metadata[0].content, "Rust 是一门系统编程语言");
-        assert_eq!(metadata[0].source_file, "docs/rust.md");
-        assert_eq!(metadata[0].chunk_index, 0);
-        assert_eq!(metadata[1].content, "Python 是一门脚本语言");
-        assert_eq!(metadata[2].source_file, "docs/search.md");
-        assert_eq!(metadata[2].chunk_index, 1);
+        assert_eq!(store_metadata.version, 2);
+        assert_eq!(store_metadata.entries.len(), 3);
+        assert_eq!(store_metadata.entries[0].content, "Rust 是一门系统编程语言");
+        assert_eq!(store_metadata.entries[0].source_file, "docs/rust.md");
+        assert_eq!(store_metadata.entries[0].chunk_index, 0);
+        assert_eq!(store_metadata.entries[1].content, "Python 是一门脚本语言");
+        assert_eq!(store_metadata.entries[2].source_file, "docs/search.md");
+        assert_eq!(store_metadata.entries[2].chunk_index, 1);
     }
 
     #[test]
@@ -318,7 +486,7 @@ mod tests {
 
         let chunks = create_test_chunks();
         let embeddings = create_test_embeddings();
-        store.rebuild(&chunks, &embeddings).unwrap();
+        store.rebuild(&chunks, &embeddings, &[]).unwrap();
 
         // 查询向量与第一个向量完全一致
         let results = store.query(&[1.0, 0.0, 0.0, 0.0], 2).unwrap();
@@ -334,7 +502,7 @@ mod tests {
 
         let chunks = create_test_chunks();
         let embeddings = create_test_embeddings();
-        store.rebuild(&chunks, &embeddings).unwrap();
+        store.rebuild(&chunks, &embeddings, &[]).unwrap();
 
         let results = store.query(&[1.0, 0.0, 0.0, 0.0], 3).unwrap();
 
@@ -356,7 +524,7 @@ mod tests {
 
         let chunks = create_test_chunks();
         let embeddings = create_test_embeddings();
-        store.rebuild(&chunks, &embeddings).unwrap();
+        store.rebuild(&chunks, &embeddings, &[]).unwrap();
 
         // 查询向量 [1, 0, 0, 0] 与第一个向量 [1, 0, 0, 0] 余弦相似度为 1.0
         let results = store.query(&[1.0, 0.0, 0.0, 0.0], 3).unwrap();
@@ -381,7 +549,7 @@ mod tests {
 
         let chunks = create_test_chunks();
         let embeddings = create_test_embeddings();
-        store.rebuild(&chunks, &embeddings).unwrap();
+        store.rebuild(&chunks, &embeddings, &[]).unwrap();
 
         let results = store.query(&[1.0, 0.0, 0.0, 0.0], 3).unwrap();
 
@@ -408,7 +576,7 @@ mod tests {
 
         let chunks = create_test_chunks();
         let embeddings = create_test_embeddings();
-        store.rebuild(&chunks, &embeddings).unwrap();
+        store.rebuild(&chunks, &embeddings, &[]).unwrap();
 
         // top_k 大于数据量时，返回所有数据
         let results = store.query(&[1.0, 0.0, 0.0, 0.0], 100).unwrap();
@@ -422,7 +590,7 @@ mod tests {
 
         let chunks = create_test_chunks();
         let embeddings = create_test_embeddings();
-        store.rebuild(&chunks, &embeddings).unwrap();
+        store.rebuild(&chunks, &embeddings, &[]).unwrap();
 
         // 零向量查询应返回空结果（范数为 0 无法计算余弦相似度）
         let results = store.query(&[0.0, 0.0, 0.0, 0.0], 5).unwrap();
@@ -439,18 +607,20 @@ mod tests {
             content: "旧数据".to_string(),
             source_file: "old.txt".to_string(),
             chunk_index: 0,
+            token_count: 2,
         }];
         let embeddings1 = vec![vec![1.0, 0.0]];
-        store.rebuild(&chunks1, &embeddings1).unwrap();
+        store.rebuild(&chunks1, &embeddings1, &[]).unwrap();
 
         // 第二次写入（覆盖）
         let chunks2 = vec![TextChunk {
             content: "新数据".to_string(),
             source_file: "new.txt".to_string(),
             chunk_index: 0,
+            token_count: 2,
         }];
         let embeddings2 = vec![vec![0.0, 1.0]];
-        store.rebuild(&chunks2, &embeddings2).unwrap();
+        store.rebuild(&chunks2, &embeddings2, &[]).unwrap();
 
         // 查询应只返回新数据
         let results = store.query(&[0.0, 1.0], 5).unwrap();

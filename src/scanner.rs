@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024;
 
 /// 支持的文档扩展名列表
-const SUPPORTED_EXTENSIONS: &[&str] = &["txt", "md", "pdf", "docx", "xlsx", "csv"];
+const SUPPORTED_EXTENSIONS: &[&str] = &["txt", "md", "pdf", "docx", "doc", "xlsx", "xls", "csv", "pptx", "ppt", "rtf"];
 
 /// 文档扫描器
 /// 负责递归遍历目录，筛选出支持格式的文档文件
@@ -20,10 +20,21 @@ pub struct DocumentScanner {
     max_file_size: u64,
 }
 
+/// 文件信息，包含路径和修改时间
+#[derive(Debug, Clone)]
+pub struct FileInfo {
+    /// 文件相对路径（相对于扫描根目录）
+    pub relative_path: PathBuf,
+    /// 文件绝对路径
+    pub absolute_path: PathBuf,
+    /// 文件最后修改时间（Unix 时间戳，毫秒）
+    pub last_modified: u64,
+}
+
 /// 扫描结果
 pub struct ScanResult {
     /// 有效文件列表（通过所有过滤条件的文件）
-    pub files: Vec<PathBuf>,
+    pub files: Vec<FileInfo>,
     /// 跳过的文件及原因
     pub skipped: Vec<SkipInfo>,
     /// 扫描的文件总数（包含有效和跳过的）
@@ -70,11 +81,15 @@ impl DocumentScanner {
         let mut total_scanned: usize = 0;
 
         // 使用 walkdir 递归遍历目录
-        for entry in WalkDir::new(folder).follow_links(true) {
+        let walker = WalkDir::new(folder)
+            .follow_links(true)
+            .min_depth(1)
+            .into_iter();
+
+        for entry in walker {
             let entry = match entry {
                 Ok(e) => e,
                 Err(err) => {
-                    // 遍历出错时记录到跳过列表
                     let path = err.path().map(|p| p.to_path_buf()).unwrap_or_default();
                     skipped.push(SkipInfo {
                         path,
@@ -84,20 +99,39 @@ impl DocumentScanner {
                 }
             };
 
+            // 获取文件名
+            let file_name = entry.file_name().to_string_lossy().to_string();
+
             // 只处理文件，跳过目录
             if !entry.file_type().is_file() {
+                // 隐藏目录记录跳过原因
+                if file_name.starts_with('.') {
+                    skipped.push(SkipInfo {
+                        path: entry.path().to_path_buf(),
+                        reason: "跳过隐藏目录".to_string(),
+                    });
+                }
+                continue;
+            }
+
+            // 跳过隐藏文件（名称以 . 开头）
+            if file_name.starts_with('.') {
+                skipped.push(SkipInfo {
+                    path: entry.path().to_path_buf(),
+                    reason: "跳过隐藏文件".to_string(),
+                });
                 continue;
             }
 
             total_scanned += 1;
-            let path = entry.path().to_path_buf();
+            let absolute_path = entry.path().to_path_buf();
 
             // 检查文件大小
             let metadata = match entry.metadata() {
                 Ok(m) => m,
                 Err(err) => {
                     skipped.push(SkipInfo {
-                        path,
+                        path: absolute_path,
                         reason: format!("无法读取文件元数据: {}", err),
                     });
                     continue;
@@ -109,7 +143,7 @@ impl DocumentScanner {
             // 跳过空文件（0字节）
             if file_size == 0 {
                 skipped.push(SkipInfo {
-                    path,
+                    path: absolute_path,
                     reason: "文件为空（0字节）".to_string(),
                 });
                 continue;
@@ -118,7 +152,7 @@ impl DocumentScanner {
             // 跳过超大文件（>100MB）
             if file_size > self.max_file_size {
                 skipped.push(SkipInfo {
-                    path,
+                    path: absolute_path,
                     reason: format!(
                         "文件过大（{:.1}MB），超过 100MB 限制",
                         file_size as f64 / (1024.0 * 1024.0)
@@ -127,25 +161,43 @@ impl DocumentScanner {
                 continue;
             }
 
+            // 获取文件最后修改时间（Unix 时间戳，毫秒）
+            let last_modified = match metadata.modified() {
+                Ok(time) => time.duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0),
+                Err(_) => 0,
+            };
+
+            // 计算相对路径
+            let relative_path = match absolute_path.strip_prefix(folder) {
+                Ok(p) => p.to_path_buf(),
+                Err(_) => absolute_path.clone(),
+            };
+
             // 检查文件扩展名
-            let extension = path
+            let extension = absolute_path
                 .extension()
                 .and_then(|ext| ext.to_str())
                 .map(|ext| ext.to_lowercase());
 
             match extension {
                 Some(ext) if self.supported_extensions.contains(&ext.as_str()) => {
-                    files.push(path);
+                    files.push(FileInfo {
+                        relative_path,
+                        absolute_path,
+                        last_modified,
+                    });
                 }
                 Some(ext) => {
                     skipped.push(SkipInfo {
-                        path,
+                        path: absolute_path,
                         reason: format!("不支持的文件格式: .{}", ext),
                     });
                 }
                 None => {
                     skipped.push(SkipInfo {
-                        path,
+                        path: absolute_path,
                         reason: "文件无扩展名".to_string(),
                     });
                 }
@@ -196,15 +248,20 @@ mod tests {
         create_file(dir, "readme.md", b"# Title");
         create_file(dir, "report.pdf", b"pdf content");
         create_file(dir, "letter.docx", b"docx content");
+        create_file(dir, "legacy.doc", b"doc content");
         create_file(dir, "data.xlsx", b"xlsx content");
+        create_file(dir, "legacy.xls", b"xls content");
         create_file(dir, "table.csv", b"a,b,c");
+        create_file(dir, "slides.pptx", b"pptx content");
+        create_file(dir, "legacy.ppt", b"ppt content");
+        create_file(dir, "document.rtf", b"rtf content");
 
         let scanner = DocumentScanner::new();
         let result = scanner.scan(dir).unwrap();
 
-        assert_eq!(result.files.len(), 6);
+        assert_eq!(result.files.len(), 11);
         assert_eq!(result.skipped.len(), 0);
-        assert_eq!(result.total_scanned, 6);
+        assert_eq!(result.total_scanned, 11);
     }
 
     #[test]
@@ -368,10 +425,47 @@ mod tests {
     }
 
     #[test]
+    fn test_scan_hidden_files_skipped() {
+        // 测试隐藏文件被正确跳过
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+
+        create_file(dir, ".hidden.txt", b"hidden content");
+        create_file(dir, "visible.txt", b"visible content");
+
+        let scanner = DocumentScanner::new();
+        let result = scanner.scan(dir).unwrap();
+
+        assert_eq!(result.files.len(), 1);
+        assert_eq!(result.skipped.len(), 1);
+        assert!(result.skipped[0].reason.contains("跳过隐藏文件"));
+    }
+
+    #[test]
+    fn test_scan_hidden_directories_skipped() {
+        // 测试隐藏文件被正确跳过（文件名以 . 开头）
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+
+        create_file(dir, "visible.txt", b"visible");
+        create_file(dir, ".hidden1.txt", b"hidden1");
+        create_file(dir, ".hidden2.txt", b"hidden2");
+
+        let scanner = DocumentScanner::new();
+        let result = scanner.scan(dir).unwrap();
+
+        assert_eq!(result.files.len(), 1); // 只有 visible.txt
+        // 隐藏文件都被跳过
+        assert_eq!(result.skipped.len(), 2); // .hidden1.txt 和 .hidden2.txt
+        let skip_reasons: Vec<&str> = result.skipped.iter().map(|s| s.reason.as_str()).collect();
+        assert!(skip_reasons.iter().all(|r| r.contains("跳过隐藏文件")));
+    }
+
+    #[test]
     fn test_default_trait() {
         // 测试 Default trait 实现
         let scanner = DocumentScanner::default();
-        assert_eq!(scanner.supported_extensions.len(), 6);
+        assert_eq!(scanner.supported_extensions.len(), 11);
         assert_eq!(scanner.max_file_size, MAX_FILE_SIZE);
     }
 
@@ -384,7 +478,12 @@ mod tests {
         assert!(exts.contains(&"md"));
         assert!(exts.contains(&"pdf"));
         assert!(exts.contains(&"docx"));
+        assert!(exts.contains(&"doc"));
         assert!(exts.contains(&"xlsx"));
+        assert!(exts.contains(&"xls"));
         assert!(exts.contains(&"csv"));
+        assert!(exts.contains(&"pptx"));
+        assert!(exts.contains(&"ppt"));
+        assert!(exts.contains(&"rtf"));
     }
 }

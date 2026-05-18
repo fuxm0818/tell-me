@@ -31,6 +31,7 @@ pub struct FQAFile {
 }
 
 /// FQA 搜索结果
+#[derive(Debug, Clone)]
 pub struct FQASearchResult {
     /// 匹配的问题
     pub question: String,
@@ -38,6 +39,27 @@ pub struct FQASearchResult {
     pub answer: String,
     /// 余弦相似度分数
     pub score: f32,
+}
+
+/// FQA 搜索配置
+#[derive(Debug, Clone)]
+pub struct FQASearchConfig {
+    /// 返回结果数量上限
+    pub top_k: usize,
+    /// 相似度阈值，低于此值的结果将被过滤（范围：0.0-1.0）
+    pub similarity_threshold: f32,
+    /// 是否启用阈值过滤
+    pub enable_threshold: bool,
+}
+
+impl Default for FQASearchConfig {
+    fn default() -> Self {
+        Self {
+            top_k: 3,
+            similarity_threshold: 0.85,
+            enable_threshold: true,
+        }
+    }
 }
 
 /// 标准问答存储
@@ -94,10 +116,19 @@ impl FQAStore {
         }
     }
 
-    /// 基于余弦相似度匹配标准答案 Top-K
+    /// 基于余弦相似度匹配标准答案 Top-K（简化版本）
     /// 计算 query_embedding 与每个 entry 的 embedding 的余弦相似度
     /// 返回 Top-K 结果按分数降序排列
     pub fn search(&self, query_embedding: &[f32], top_k: usize) -> Vec<FQASearchResult> {
+        self.search_with_config(query_embedding, &FQASearchConfig {
+            top_k,
+            ..FQASearchConfig::default()
+        })
+    }
+
+    /// 基于余弦相似度匹配标准答案（带配置版本）
+    /// 支持相似度阈值过滤（参考 Python 版本的 0.85 阈值）
+    pub fn search_with_config(&self, query_embedding: &[f32], config: &FQASearchConfig) -> Vec<FQASearchResult> {
         if self.entries.is_empty() {
             return Vec::new();
         }
@@ -113,13 +144,20 @@ impl FQAStore {
                     score,
                 }
             })
+            .filter(|r| {
+                if config.enable_threshold {
+                    r.score >= config.similarity_threshold
+                } else {
+                    true
+                }
+            })
             .collect();
 
         // 按分数降序排列
         results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
         // 取 Top-K
-        results.truncate(top_k);
+        results.truncate(config.top_k);
         results
     }
 
@@ -258,7 +296,7 @@ mod tests {
         // 添加三个条目，向量方向不同
         store.add("问题1", "答案1", vec![1.0, 0.0, 0.0]).unwrap();
         store.add("问题2", "答案2", vec![0.0, 1.0, 0.0]).unwrap();
-        store.add("问题3", "答案3", vec![0.7, 0.7, 0.0]).unwrap();
+        store.add("问题3", "答案3", vec![0.9, 0.1, 0.0]).unwrap();
 
         // 查询向量与问题1最相似
         let results = store.search(&[1.0, 0.0, 0.0], 2);

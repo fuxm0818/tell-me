@@ -30,6 +30,10 @@ walkdir = "2"
 chrono = "0.4"
 anyhow = "1"
 thiserror = "2"
+sha256 = "1"
+
+# 并行处理
+rayon = "1"
 
 [dev-dependencies]
 tempfile = "3"
