@@ -1,0 +1,42 @@
+[package]
+name = "coi"
+version = "0.1.0"
+edition = "2021"
+description = "COI - 我问你答：本地离线文档问答工具"
+
+[dependencies]
+# CLI 框架
+clap = { version = "4", features = ["derive"] }
+
+# 嵌入模型推理
+fastembed = "4"
+
+# 向量计算
+ndarray = "0.16"
+
+# 序列化
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1"
+
+# 文档解析
+pdf-extract = "0.7"
+docx-rs = "0.4"
+calamine = "0.26"
+csv = "1"
+
+# 工具
+walkdir = "2"
+chrono = "0.4"
+anyhow = "1"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
+panic = "unwind"

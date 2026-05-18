@@ -1,0 +1,20 @@
+# Rust 编译产物
+target/
+
+# 构建输出
+dist/
+packages/
+
+# 模型文件（太大，不提交到 git）
+model/
+dist/model/
+
+# macOS 系统文件
+.DS_Store
+
+# QEMU core dump（交叉编译失败产物）
+*.core
+
+# 运行时数据
+coi_data/
+.idea/
