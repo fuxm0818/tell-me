@@ -35,40 +35,42 @@ which coi 2>/dev/null || ls ~/.local/bin/coi 2>/dev/null || ls /usr/local/bin/co
 
 找不到 → 执行第 2 步。
 
-### 第 2 步：从 Skill 自带的 bin/ 目录安装
+### 第 2 步：从 GitHub Releases 安装
 
-本 Skill 已内置编译好的可执行文件，无需下载。先检测当前操作系统，然后复制对应的程序：
+从 GitHub 项目 `fuxm0818/coi-qa` 的最新 Release 下载对应平台的可执行文件：
 
+**macOS：**
 ```bash
-# 检测操作系统并选择对应程序
-OS="$(uname -s)"
-case "$OS" in
-    Darwin) BIN_NAME="coi-macos" ;;
-    Linux)  BIN_NAME="coi-linux" ;;
-    *)      BIN_NAME="" ;;
-esac
+mkdir -p ~/.local/bin
+curl -s https://api.github.com/repos/fuxm0818/coi-qa/releases/latest | grep "coi-macos" | cut -d '"' -f 4 | xargs curl -L -o ~/.local/bin/coi
+chmod +x ~/.local/bin/coi
+xattr -d com.apple.quarantine ~/.local/bin/coi 2>/dev/null
+~/.local/bin/coi --help
 ```
 
-**bin/ 目录中的文件对应关系：**
-- `coi-macos` → macOS（Intel 和 M 芯片通用）
-- `coi-windows.exe` → Windows
-
-**macOS / Linux：**
+**Linux：**
 ```bash
-SKILL_DIR="$(dirname "<本SKILL.md的绝对路径>")"
 mkdir -p ~/.local/bin
-cp "$SKILL_DIR/bin/$BIN_NAME" ~/.local/bin/coi
+curl -s https://api.github.com/repos/fuxm0818/coi-qa/releases/latest | grep "coi-linux" | cut -d '"' -f 4 | xargs curl -L -o ~/.local/bin/coi
 chmod +x ~/.local/bin/coi
-xattr -d com.apple.quarantine ~/.local/bin/coi 2>/dev/null  # macOS 需要
 ~/.local/bin/coi --help
 ```
 
 **Windows（PowerShell）：**
 ```powershell
-$skillDir = "<本SKILL.md所在目录>"
 $coiDir = "$env:LOCALAPPDATA\coi"
 New-Item -ItemType Directory -Force -Path $coiDir | Out-Null
-Copy-Item "$skillDir\bin\coi-windows.exe" "$coiDir\coi.exe"
+$response = Invoke-RestMethod -Uri "https://api.github.com/repos/fuxm0818/coi-qa/releases/latest"
+$asset = $response.assets | Where-Object { $_.name -like "*coi-windows*" }
+Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "$coiDir\coi.exe"
+& "$coiDir\coi.exe" --help
+```
+
+**如果下载失败（网络问题），可以使用代理方式：**
+```powershell
+$coiDir = "$env:LOCALAPPDATA\coi"
+New-Item -ItemType Directory -Force -Path $coiDir | Out-Null
+curl.exe -L "https://ghproxy.net/https://github.com/fuxm0818/coi-qa/releases/download/v1.0.1/coi-windows.exe" -o "$coiDir\coi.exe"
 & "$coiDir\coi.exe" --help
 ```
 
