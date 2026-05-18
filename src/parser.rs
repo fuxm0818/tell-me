@@ -296,11 +296,10 @@ impl DocumentParser {
         // 尝试多种编码读取
         let content = Self::decode_bytes(&bytes);
         
-        // 从 RTF 中提取可读文本
-        // RTF 控制字格式：\wordname 或 \wordname123
-        // 我们提取不在大括号内的纯文本和基本控制字的内容
+        // 从 RTF 中提取可读文本 - 简单且可靠的方法
         let mut result = Vec::new();
         let mut in_brace_depth: usize = 0;
+        let mut skip_dest: bool = false;
         let chars: Vec<char> = content.chars().collect();
         let mut i = 0;
         
@@ -310,11 +309,29 @@ impl DocumentParser {
             if c == '{' {
                 in_brace_depth += 1;
                 i += 1;
+                // 检查是否是特殊目标（如字体表、颜色表等），需要跳过
+                if i < chars.len() && chars[i] == '\\' {
+                    let mut j = i + 1;
+                    let mut word = String::new();
+                    while j < chars.len() && chars[j].is_ascii_alphabetic() {
+                        word.push(chars[j]);
+                        j += 1;
+                    }
+                    if word == "fonttbl" || word == "colortbl" || word == "generator" || word == "*" {
+                        skip_dest = true;
+                    }
+                }
                 continue;
             }
             
             if c == '}' {
                 in_brace_depth = in_brace_depth.saturating_sub(1);
+                skip_dest = false;
+                i += 1;
+                continue;
+            }
+            
+            if in_brace_depth > 1 || skip_dest {
                 i += 1;
                 continue;
             }
@@ -326,60 +343,69 @@ impl DocumentParser {
                     
                     // 跳过 RTF 控制字（以字母开头）
                     if next_c.is_ascii_alphabetic() {
-                        i += 2;
-                        // 跳过控制字的数字参数（如果有）
+                        let mut j = i + 1;
+                        let mut word = String::new();
+                        while j < chars.len() && chars[j].is_ascii_alphabetic() {
+                            word.push(chars[j]);
+                            j += 1;
+                        }
+                        
+                        // 处理特殊控制字
+                        if word == "par" || word == "line" {
+                            result.push('\n');
+                        } else if word == "tab" {
+                            result.push('\t');
+                        }
+                        
+                        i = j;
+                        // 跳过数字参数
                         while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '-') {
                             i += 1;
                         }
-                        // 跳过可能的后缀字符
+                        // 跳过可能的空格
                         if i < chars.len() && chars[i] == ' ' {
                             i += 1;
                         }
                         continue;
                     }
                     
-                    // 处理特殊控制字 \par, \line, \tab 等，转换为换行
-                    if next_c == 'p' || next_c == 'l' {
-                        result.push('\n');
-                        i += 2;
-                        continue;
-                    }
-                    if next_c == 't' {
-                        result.push('\t');
+                    // 如果是特殊转义字符
+                    if next_c == '\\' || next_c == '{' || next_c == '}' {
+                        result.push(next_c);
                         i += 2;
                         continue;
                     }
                     
-                    // 如果是反斜杠后面跟非控制字符，跳过反斜杠
-                    if next_c != '\\' && next_c != '{' && next_c != '}' {
-                        i += 1;
-                        continue;
-                    }
-                    
-                    // \\ 或 \{ 或 \} 表示字面字符
-                    result.push(next_c);
-                    i += 2;
+                    // 其他单个字符转义，跳过反斜杠
+                    i += 1;
                     continue;
                 }
             }
             
-            // 普通字符
+            // 普通字符，只要在第一层就收集
             result.push(c);
             i += 1;
         }
         
         // 清理和规范化文本
         let text = result.into_iter().collect::<String>();
-        let cleaned = Self::clean_text(&text);
+        // 简单清理：保留中文、英文、常见标点，过滤掉可能的控制字符
+        let cleaned: String = text.chars()
+            .filter(|&c| {
+                (c as u32 >= 0x4E00 && c as u32 <= 0x9FFF) || // 中文
+                c.is_ascii_alphabetic() || c.is_ascii_punctuation() || c.is_whitespace()
+            })
+            .collect();
+        let final_cleaned = Self::clean_text(&cleaned);
         
-        if cleaned.trim().is_empty() {
+        if final_cleaned.trim().is_empty() {
             return Err(CoiError::ParseError {
                 file: file_name.to_string(),
                 reason: "RTF 文件内容为空或无法提取文本".to_string(),
             });
         }
         
-        Ok(cleaned)
+        Ok(final_cleaned)
     }
 
     /// 解析 PPTX 文件：PPTX 本质上是 ZIP 压缩包，包含 XML 文件
