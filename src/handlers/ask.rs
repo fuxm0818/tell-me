@@ -10,21 +10,6 @@ use crate::error::CoiError;
 use crate::fqa_store::{FQAStore, FQASearchConfig};
 use crate::vector_store::VectorStore;
 
-/// 统一的搜索结果类型
-#[derive(Debug, Clone)]
-enum SearchResult {
-    Document {
-        content: String,
-        source_file: String,
-        score: f32,
-    },
-    FQA {
-        question: String,
-        answer: String,
-        score: f32,
-    },
-}
-
 /// 打印带前缀的信息
 fn print_info(message: &str) {
     println!("[COI] {}", message);

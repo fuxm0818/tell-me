@@ -43,18 +43,6 @@ fn read_file_with_fallback(file_path: &Path) -> Result<String, std::io::Error> {
 pub struct ParseResult {
     /// 提取的文本内容
     pub content: String,
-    /// 文档元数据
-    pub metadata: DocMetadata,
-}
-
-/// 文档元数据
-pub struct DocMetadata {
-    /// 文件名
-    pub file_name: String,
-    /// 文件类型（扩展名）
-    pub file_type: String,
-    /// 页数（仅 PDF 有值）
-    pub page_count: Option<usize>,
 }
 
 /// 文档解析器
@@ -81,7 +69,7 @@ impl DocumentParser {
             .to_string_lossy()
             .to_lowercase();
 
-        let (content, page_count) = match extension.as_str() {
+        let (content, _page_count) = match extension.as_str() {
             "txt" => (self.parse_txt(file_path, &file_name)?, None),
             "md" => (self.parse_md(file_path, &file_name)?, None),
             "pdf" => self.parse_pdf(file_path, &file_name)?,
@@ -98,11 +86,6 @@ impl DocumentParser {
 
         Ok(ParseResult {
             content,
-            metadata: DocMetadata {
-                file_name,
-                file_type: extension,
-                page_count,
-            },
         })
     }
 

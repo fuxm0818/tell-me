@@ -21,17 +21,13 @@ pub struct TextChunk {
 /// 文档分析结果
 #[derive(Debug)]
 struct DocumentAnalysis {
-    total_chars: usize,
-    total_tokens: usize,
     avg_sentence_length: f64,
     paragraph_count: usize,
-    density_score: f64,
     complexity_level: ComplexityLevel,
     title_density: f64,
     list_density: f64,
     has_tables: bool,
     content_type: ContentType,
-    avg_paragraph_length: f64,
 }
 
 /// 复杂度级别
@@ -58,7 +54,6 @@ struct ChunkStrategy {
     min_chunk_size: usize,
     merge_short_chunks: bool,
     boundary_preference: BoundaryPreference,
-    strategy_name: String,
 }
 
 /// 边界偏好
@@ -81,20 +76,6 @@ pub struct ChunkSplitter {
 }
 
 impl ChunkSplitter {
-    /// 创建新的分块器实例
-    ///
-    /// # 参数
-    /// - `chunk_size`: 每块最大字符数
-    /// - `overlap`: 相邻块重叠字符数
-    pub fn new(chunk_size: usize, overlap: usize) -> Self {
-        Self {
-            default_chunk_size: chunk_size,
-            default_overlap: overlap,
-            chunk_size_by_type: Self::build_chunk_size_map(),
-            overlap_by_type: Self::build_overlap_map(),
-        }
-    }
-
     /// 使用默认参数创建分块器（chunk_size=500, overlap=50）
     pub fn default() -> Self {
         Self {
@@ -154,25 +135,20 @@ impl ChunkSplitter {
     }
 
     /// 分析文档特征
-    fn analyze_document(&self, text: &str, file_path: &str) -> DocumentAnalysis {
+    fn analyze_document(&self, text: &str, _file_path: &str) -> DocumentAnalysis {
         if text.trim().is_empty() {
             return DocumentAnalysis {
-                total_chars: 0,
-                total_tokens: 0,
                 avg_sentence_length: 0.0,
                 paragraph_count: 0,
-                density_score: 0.0,
                 complexity_level: ComplexityLevel::Low,
                 title_density: 0.0,
                 list_density: 0.0,
                 has_tables: false,
                 content_type: ContentType::Narrative,
-                avg_paragraph_length: 0.0,
             };
         }
 
         let total_chars = text.len();
-        let total_tokens = (total_chars as f64 / 2.5) as usize;
 
         let lines: Vec<&str> = text.split('\n').collect();
         let total_lines = lines.iter().filter(|l| !l.trim().is_empty()).count();
@@ -204,12 +180,6 @@ impl ChunkSplitter {
             0.0
         };
 
-        let avg_paragraph_length = if paragraph_count > 0 {
-            paragraphs.iter().map(|p| p.len()).sum::<usize>() as f64 / paragraph_count as f64
-        } else {
-            0.0
-        };
-
         let complexity_level = if avg_sentence_length > 100.0 || density_score > 0.9 {
             ComplexityLevel::High
         } else if avg_sentence_length > 50.0 || density_score > 0.7 {
@@ -229,17 +199,13 @@ impl ChunkSplitter {
         };
 
         DocumentAnalysis {
-            total_chars,
-            total_tokens,
             avg_sentence_length,
             paragraph_count,
-            density_score,
             complexity_level,
             title_density,
             list_density,
             has_tables,
             content_type,
-            avg_paragraph_length,
         }
     }
 
@@ -287,35 +253,29 @@ impl ChunkSplitter {
 
         let mut chunk_size = base_chunk_size;
         let mut chunk_overlap = base_overlap;
-        let mut strategy_name = "默认策略".to_string();
 
         match analysis.content_type {
             ContentType::List => {
                 chunk_size = (base_chunk_size as f64 * 0.8) as usize;
                 chunk_overlap = (base_overlap as f64 * 1.2) as usize;
-                strategy_name = "列表型文档策略".to_string();
             }
             ContentType::Table => {
                 chunk_size = (base_chunk_size as f64 * 0.5) as usize;
                 chunk_overlap = (base_overlap as f64 * 1.5) as usize;
-                strategy_name = "表格型文档策略".to_string();
             }
             ContentType::Structured => {
                 chunk_size = (base_chunk_size as f64 * 0.9) as usize;
                 chunk_overlap = (base_overlap as f64 * 1.1) as usize;
-                strategy_name = "结构化文档策略".to_string();
             }
             ContentType::Narrative => {
                 match analysis.complexity_level {
                     ComplexityLevel::High => {
                         chunk_size = (base_chunk_size as f64 * 0.75) as usize;
                         chunk_overlap = (base_overlap as f64 * 1.5) as usize;
-                        strategy_name = "高复杂度策略".to_string();
                     }
                     ComplexityLevel::Low => {
                         chunk_size = (base_chunk_size as f64 * 1.25) as usize;
                         chunk_overlap = (base_overlap as f64 * 0.75) as usize;
-                        strategy_name = "低复杂度策略".to_string();
                     }
                     ComplexityLevel::Medium => {}
                 }
@@ -325,16 +285,13 @@ impl ChunkSplitter {
         // 根据句子长度调整
         if analysis.avg_sentence_length > 120.0 {
             chunk_size = std::cmp::min((chunk_size as f64 * 1.3) as usize, 1024);
-            strategy_name += "+长句适配";
         } else if analysis.avg_sentence_length < 30.0 {
             chunk_size = (chunk_size as f64 * 0.85) as usize;
-            strategy_name += "+短句适配";
         }
 
         // 标题密集时增加重叠
         if analysis.title_density > 0.15 {
             chunk_overlap = (chunk_overlap as f64 * 1.2) as usize;
-            strategy_name += "+标题增强";
         }
 
         // 列表密集时调整
@@ -362,7 +319,6 @@ impl ChunkSplitter {
             min_chunk_size,
             merge_short_chunks: analysis.content_type != ContentType::List,
             boundary_preference,
-            strategy_name,
         }
     }
 

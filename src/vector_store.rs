@@ -11,16 +11,11 @@ use std::path::{Path, PathBuf};
 
 use crate::splitter::TextChunk;
 
-/// 文件哈希算法类型
-const HASH_ALGORITHM: &str = "sha256";
-
 /// 检索结果结构体
 #[derive(Debug, Clone)]
 pub struct SearchResult {
     /// 文本内容
     pub content: String,
-    /// 来源类型："document" 或 "fqa"
-    pub source: String,
     /// 来源文件路径
     pub source_file: String,
     /// 相似度分数
@@ -62,19 +57,6 @@ struct StoreMetadata {
     entries: Vec<MetadataEntry>,
     /// 文件状态映射（文件路径 -> 文件元数据）
     file_status: HashMap<String, FileMetadata>,
-}
-
-/// 增量更新结果
-#[derive(Debug)]
-pub struct IncrementalUpdateResult {
-    /// 新增的文件数量
-    pub added_files: usize,
-    /// 修改的文件数量
-    pub modified_files: usize,
-    /// 删除的文件数量
-    pub deleted_files: usize,
-    /// 未变更的文件数量
-    pub unchanged_files: usize,
 }
 
 /// 向量存储，管理向量数据的持久化和检索
@@ -137,35 +119,6 @@ impl VectorStore {
             modified_at: Self::get_file_modified_time(file_path)?,
             file_size: Self::get_file_size(file_path)?,
         })
-    }
-
-    /// 检查文件是否发生变化
-    pub fn has_file_changed(&self, file_path: &Path) -> anyhow::Result<bool> {
-        let current_metadata = Self::create_file_metadata(file_path)?;
-        if let Some(existing) = self.file_status.get(&current_metadata.file_path) {
-            Ok(existing.file_hash != current_metadata.file_hash)
-        } else {
-            Ok(true) // 文件不存在于存储中，视为新文件（已变化）
-        }
-    }
-
-    /// 获取已处理的文件列表
-    pub fn get_processed_files(&self) -> Vec<String> {
-        self.file_status.keys().cloned().collect()
-    }
-
-    /// 检测文件变更
-    pub fn detect_changes(&self, current_files: &[&Path]) -> Vec<String> {
-        let mut changed_files = Vec::new();
-        for file_path in current_files {
-            let file_path_str = file_path.to_string_lossy().to_string();
-            match self.has_file_changed(file_path) {
-                Ok(true) => changed_files.push(file_path_str),
-                Ok(false) => {}
-                Err(_) => changed_files.push(file_path_str), // 出错时视为需要重新处理
-            }
-        }
-        changed_files
     }
 
     /// 获取 embeddings.bin 文件路径
@@ -336,7 +289,6 @@ impl VectorStore {
             .filter_map(|(idx, score)| {
                 metadata.get(*idx).map(|meta| SearchResult {
                     content: meta.content.clone(),
-                    source: "document".to_string(),
                     source_file: meta.source_file.clone(),
                     score: *score,
                 })
@@ -553,10 +505,6 @@ mod tests {
 
         let results = store.query(&[1.0, 0.0, 0.0, 0.0], 3).unwrap();
 
-        // 所有结果的 source 应为 "document"
-        for result in &results {
-            assert_eq!(result.source, "document");
-        }
     }
 
     #[test]

@@ -20,15 +20,13 @@ pub struct DocumentScanner {
     max_file_size: u64,
 }
 
-/// 文件信息，包含路径和修改时间
+/// 文件信息，包含路径
 #[derive(Debug, Clone)]
 pub struct FileInfo {
     /// 文件相对路径（相对于扫描根目录）
     pub relative_path: PathBuf,
     /// 文件绝对路径
     pub absolute_path: PathBuf,
-    /// 文件最后修改时间（Unix 时间戳，毫秒）
-    pub last_modified: u64,
 }
 
 /// 扫描结果
@@ -37,14 +35,10 @@ pub struct ScanResult {
     pub files: Vec<FileInfo>,
     /// 跳过的文件及原因
     pub skipped: Vec<SkipInfo>,
-    /// 扫描的文件总数（包含有效和跳过的）
-    pub total_scanned: usize,
 }
 
 /// 跳过文件的信息
 pub struct SkipInfo {
-    /// 被跳过的文件路径
-    pub path: PathBuf,
     /// 跳过原因
     pub reason: String,
 }
@@ -78,7 +72,6 @@ impl DocumentScanner {
 
         let mut files = Vec::new();
         let mut skipped = Vec::new();
-        let mut total_scanned: usize = 0;
 
         // 使用 walkdir 递归遍历目录
         let walker = WalkDir::new(folder)
@@ -90,9 +83,7 @@ impl DocumentScanner {
             let entry = match entry {
                 Ok(e) => e,
                 Err(err) => {
-                    let path = err.path().map(|p| p.to_path_buf()).unwrap_or_default();
                     skipped.push(SkipInfo {
-                        path,
                         reason: format!("遍历错误: {}", err),
                     });
                     continue;
@@ -107,7 +98,6 @@ impl DocumentScanner {
                 // 隐藏目录记录跳过原因
                 if file_name.starts_with('.') {
                     skipped.push(SkipInfo {
-                        path: entry.path().to_path_buf(),
                         reason: "跳过隐藏目录".to_string(),
                     });
                 }
@@ -117,13 +107,11 @@ impl DocumentScanner {
             // 跳过隐藏文件（名称以 . 开头）
             if file_name.starts_with('.') {
                 skipped.push(SkipInfo {
-                    path: entry.path().to_path_buf(),
                     reason: "跳过隐藏文件".to_string(),
                 });
                 continue;
             }
 
-            total_scanned += 1;
             let absolute_path = entry.path().to_path_buf();
 
             // 检查文件大小
@@ -131,7 +119,6 @@ impl DocumentScanner {
                 Ok(m) => m,
                 Err(err) => {
                     skipped.push(SkipInfo {
-                        path: absolute_path,
                         reason: format!("无法读取文件元数据: {}", err),
                     });
                     continue;
@@ -143,7 +130,6 @@ impl DocumentScanner {
             // 跳过空文件（0字节）
             if file_size == 0 {
                 skipped.push(SkipInfo {
-                    path: absolute_path,
                     reason: "文件为空（0字节）".to_string(),
                 });
                 continue;
@@ -152,7 +138,6 @@ impl DocumentScanner {
             // 跳过超大文件（>100MB）
             if file_size > self.max_file_size {
                 skipped.push(SkipInfo {
-                    path: absolute_path,
                     reason: format!(
                         "文件过大（{:.1}MB），超过 100MB 限制",
                         file_size as f64 / (1024.0 * 1024.0)
@@ -160,14 +145,6 @@ impl DocumentScanner {
                 });
                 continue;
             }
-
-            // 获取文件最后修改时间（Unix 时间戳，毫秒）
-            let last_modified = match metadata.modified() {
-                Ok(time) => time.duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0),
-                Err(_) => 0,
-            };
 
             // 计算相对路径
             let relative_path = match absolute_path.strip_prefix(folder) {
@@ -186,18 +163,15 @@ impl DocumentScanner {
                     files.push(FileInfo {
                         relative_path,
                         absolute_path,
-                        last_modified,
                     });
                 }
                 Some(ext) => {
                     skipped.push(SkipInfo {
-                        path: absolute_path,
                         reason: format!("不支持的文件格式: .{}", ext),
                     });
                 }
                 None => {
                     skipped.push(SkipInfo {
-                        path: absolute_path,
                         reason: "文件无扩展名".to_string(),
                     });
                 }
@@ -207,7 +181,6 @@ impl DocumentScanner {
         Ok(ScanResult {
             files,
             skipped,
-            total_scanned,
         })
     }
 
@@ -261,7 +234,6 @@ mod tests {
 
         assert_eq!(result.files.len(), 11);
         assert_eq!(result.skipped.len(), 0);
-        assert_eq!(result.total_scanned, 11);
     }
 
     #[test]
@@ -279,7 +251,6 @@ mod tests {
 
         assert_eq!(result.files.len(), 1);
         assert_eq!(result.skipped.len(), 2);
-        assert_eq!(result.total_scanned, 3);
 
         // 验证跳过原因包含格式信息
         let skip_reasons: Vec<&str> = result.skipped.iter().map(|s| s.reason.as_str()).collect();
@@ -380,7 +351,6 @@ mod tests {
 
         assert_eq!(result.files.len(), 0);
         assert_eq!(result.skipped.len(), 0);
-        assert_eq!(result.total_scanned, 0);
     }
 
     #[test]
@@ -404,7 +374,6 @@ mod tests {
 
         assert_eq!(result.files.len(), 2); // txt + md
         assert_eq!(result.skipped.len(), 3); // jpg + empty csv + README
-        assert_eq!(result.total_scanned, 5);
     }
 
     #[test]

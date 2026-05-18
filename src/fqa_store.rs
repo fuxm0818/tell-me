@@ -116,16 +116,6 @@ impl FQAStore {
         }
     }
 
-    /// 基于余弦相似度匹配标准答案 Top-K（简化版本）
-    /// 计算 query_embedding 与每个 entry 的 embedding 的余弦相似度
-    /// 返回 Top-K 结果按分数降序排列
-    pub fn search(&self, query_embedding: &[f32], top_k: usize) -> Vec<FQASearchResult> {
-        self.search_with_config(query_embedding, &FQASearchConfig {
-            top_k,
-            ..FQASearchConfig::default()
-        })
-    }
-
     /// 基于余弦相似度匹配标准答案（带配置版本）
     /// 支持相似度阈值过滤（参考 Python 版本的 0.85 阈值）
     pub fn search_with_config(&self, query_embedding: &[f32], config: &FQASearchConfig) -> Vec<FQASearchResult> {
