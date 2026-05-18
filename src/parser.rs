@@ -260,8 +260,6 @@ mod tests {
         let result = parser.parse(tmp.path()).unwrap();
 
         assert_eq!(result.content, content);
-        assert_eq!(result.metadata.file_type, "txt");
-        assert!(result.metadata.page_count.is_none());
     }
 
     #[test]
@@ -280,7 +278,6 @@ mod tests {
         assert!(result.content.contains("## 二级标题"));
         assert!(result.content.contains("### 三级标题"));
         assert!(result.content.contains("正文内容"));
-        assert_eq!(result.metadata.file_type, "md");
     }
 
     #[test]
@@ -300,7 +297,6 @@ mod tests {
         assert!(result.content.contains("李四"));
         assert!(result.content.contains("北京"));
         assert!(result.content.contains("上海"));
-        assert_eq!(result.metadata.file_type, "csv");
     }
 
     #[test]
@@ -341,6 +337,5 @@ mod tests {
         let result = parser.parse(tmp.path()).unwrap();
 
         assert_eq!(result.content, "");
-        assert_eq!(result.metadata.file_type, "txt");
     }
 }

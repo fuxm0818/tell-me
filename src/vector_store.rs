@@ -503,7 +503,7 @@ mod tests {
         let embeddings = create_test_embeddings();
         store.rebuild(&chunks, &embeddings, &[]).unwrap();
 
-        let results = store.query(&[1.0, 0.0, 0.0, 0.0], 3).unwrap();
+        let _results = store.query(&[1.0, 0.0, 0.0, 0.0], 3).unwrap();
 
     }
 

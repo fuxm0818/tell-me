@@ -116,6 +116,13 @@ impl FQAStore {
         }
     }
 
+    pub fn search(&self, query_embedding: &[f32], top_k: usize) -> Vec<FQASearchResult> {
+        self.search_with_config(query_embedding, &FQASearchConfig {
+            top_k,
+            ..FQASearchConfig::default()
+        })
+    }
+
     /// 基于余弦相似度匹配标准答案（带配置版本）
     /// 支持相似度阈值过滤（参考 Python 版本的 0.85 阈值）
     pub fn search_with_config(&self, query_embedding: &[f32], config: &FQASearchConfig) -> Vec<FQASearchResult> {

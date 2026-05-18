@@ -76,6 +76,15 @@ pub struct ChunkSplitter {
 }
 
 impl ChunkSplitter {
+    pub fn new(chunk_size: usize, overlap: usize) -> Self {
+        Self {
+            default_chunk_size: chunk_size,
+            default_overlap: overlap,
+            chunk_size_by_type: Self::build_chunk_size_map(),
+            overlap_by_type: Self::build_overlap_map(),
+        }
+    }
+
     /// 使用默认参数创建分块器（chunk_size=500, overlap=50）
     pub fn default() -> Self {
         Self {
@@ -97,9 +106,6 @@ impl ChunkSplitter {
         map.insert("xls", 256);
         map.insert("pdf", 384);
         map.insert("csv", 256);
-        map.insert("pptx", 512);
-        map.insert("ppt", 512);
-        map.insert("rtf", 512);
         map
     }
 
@@ -114,9 +120,6 @@ impl ChunkSplitter {
         map.insert("xls", 32);
         map.insert("pdf", 48);
         map.insert("csv", 32);
-        map.insert("pptx", 64);
-        map.insert("ppt", 64);
-        map.insert("rtf", 64);
         map
     }
 

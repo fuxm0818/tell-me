@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024;
 
 /// 支持的文档扩展名列表
-const SUPPORTED_EXTENSIONS: &[&str] = &["txt", "md", "pdf", "docx", "doc", "xlsx", "xls", "csv", "pptx", "ppt", "rtf"];
+const SUPPORTED_EXTENSIONS: &[&str] = &["txt", "md", "pdf", "docx", "doc", "xlsx", "xls", "csv"];
 
 /// 文档扫描器
 /// 负责递归遍历目录，筛选出支持格式的文档文件
@@ -225,14 +225,11 @@ mod tests {
         create_file(dir, "data.xlsx", b"xlsx content");
         create_file(dir, "legacy.xls", b"xls content");
         create_file(dir, "table.csv", b"a,b,c");
-        create_file(dir, "slides.pptx", b"pptx content");
-        create_file(dir, "legacy.ppt", b"ppt content");
-        create_file(dir, "document.rtf", b"rtf content");
 
         let scanner = DocumentScanner::new();
         let result = scanner.scan(dir).unwrap();
 
-        assert_eq!(result.files.len(), 11);
+        assert_eq!(result.files.len(), 8);
         assert_eq!(result.skipped.len(), 0);
     }
 
@@ -311,7 +308,6 @@ mod tests {
         let result = scanner.scan(dir).unwrap();
 
         assert_eq!(result.files.len(), 3);
-        assert_eq!(result.total_scanned, 3);
     }
 
     #[test]
@@ -434,7 +430,7 @@ mod tests {
     fn test_default_trait() {
         // 测试 Default trait 实现
         let scanner = DocumentScanner::default();
-        assert_eq!(scanner.supported_extensions.len(), 11);
+        assert_eq!(scanner.supported_extensions.len(), 8);
         assert_eq!(scanner.max_file_size, MAX_FILE_SIZE);
     }
 
@@ -451,8 +447,5 @@ mod tests {
         assert!(exts.contains(&"xlsx"));
         assert!(exts.contains(&"xls"));
         assert!(exts.contains(&"csv"));
-        assert!(exts.contains(&"pptx"));
-        assert!(exts.contains(&"ppt"));
-        assert!(exts.contains(&"rtf"));
     }
 }

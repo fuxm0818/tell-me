@@ -19,3 +19,5 @@ dist/model/
 coi_data/
 .idea/
 test-data/
+
+Cargo.lock
