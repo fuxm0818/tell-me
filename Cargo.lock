@@ -426,6 +426,7 @@ dependencies = [
  "clap",
  "csv",
  "docx-rs",
+ "encoding_rs",
  "fastembed",
  "ndarray",
  "pdf-extract",

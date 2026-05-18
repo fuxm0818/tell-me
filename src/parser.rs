@@ -5,6 +5,40 @@ use std::path::Path;
 
 use crate::error::CoiError;
 
+/// 尝试多种编码读取文件内容
+fn read_file_with_fallback(file_path: &Path) -> Result<String, std::io::Error> {
+    // 首先尝试 UTF-8
+    if let Ok(content) = std::fs::read_to_string(file_path) {
+        return Ok(content);
+    }
+    
+    // 尝试其他编码
+    let bytes = std::fs::read(file_path)?;
+    
+    // 尝试 GBK/GB2312 编码（Windows 中文常用）
+    let (content, _, had_errors) = encoding_rs::GBK.decode(&bytes);
+    if !had_errors && !content.is_empty() {
+        return Ok(content.to_string());
+    }
+    
+    // 尝试 GB18030 编码（更完整的中文编码）
+    let (content, _, had_errors) = encoding_rs::GB18030.decode(&bytes);
+    if !had_errors && !content.is_empty() {
+        return Ok(content.to_string());
+    }
+    
+    // 尝试 ISO-8859-1（Latin-1）作为最后的尝试
+    let (content, _, _) = encoding_rs::WINDOWS_1252.decode(&bytes);
+    if !content.is_empty() {
+        return Ok(content.to_string());
+    }
+    
+    Err(std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        "无法识别文件编码",
+    ))
+}
+
 /// 文档解析结果
 pub struct ParseResult {
     /// 提取的文本内容
@@ -72,17 +106,17 @@ impl DocumentParser {
         })
     }
 
-    /// 解析 TXT 文件：直接读取全部文本内容
+    /// 解析 TXT 文件：尝试多种编码读取全部文本内容
     fn parse_txt(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
-        std::fs::read_to_string(file_path).map_err(|e| CoiError::ParseError {
+        read_file_with_fallback(file_path).map_err(|e| CoiError::ParseError {
             file: file_name.to_string(),
             reason: format!("读取文本文件失败: {}", e),
         })
     }
 
-    /// 解析 MD 文件：读取全部内容，保留标题层级结构
+    /// 解析 MD 文件：尝试多种编码读取全部内容，保留标题层级结构
     fn parse_md(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
-        std::fs::read_to_string(file_path).map_err(|e| CoiError::ParseError {
+        read_file_with_fallback(file_path).map_err(|e| CoiError::ParseError {
             file: file_name.to_string(),
             reason: format!("读取 Markdown 文件失败: {}", e),
         })
