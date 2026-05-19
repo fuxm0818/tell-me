@@ -25,24 +25,24 @@ which coi 2>/dev/null || ls ~/.local/bin/coi 2>/dev/null || ls ./coi 2>/dev/null
 
 **macOS/Linux**:
 ```bash
-mkdir -p ~/.local/bin && curl -L "https://github.com/fuxm0818/coi/releases/latest/download/coi-$(uname | tr '[:upper:]' '[:lower:]')" -o ~/.local/bin/coi && chmod +x ~/.local/bin/coi
+mkdir -p ~/.local/bin && curl -L "https://github.com/fuxm0818/coi-qa/releases/latest/download/coi-$(uname | tr '[:upper:]' '[:lower:]')" -o ~/.local/bin/coi && chmod +x ~/.local/bin/coi
 ```
 
 **Windows**:
 ```powershell
 $coiDir = "$env:LOCALAPPDATA\coi"
 New-Item -ItemType Directory -Force -Path $coiDir | Out-Null
-Invoke-WebRequest -Uri "https://github.com/fuxm0818/coi/releases/latest/download/coi-windows.exe" -OutFile "$coiDir\coi.exe"
+Invoke-WebRequest -Uri "https://github.com/fuxm0818/coi-qa/releases/latest/download/coi-windows.exe" -OutFile "$coiDir\coi.exe"
 ```
 
 **下载失败时使用代理**:
 在下载地址前添加 `https://ghproxy.net/`，例如：
 ```bash
 # macOS/Linux 代理下载
-curl -L "https://ghproxy.net/https://github.com/fuxm0818/coi/releases/latest/download/coi-macos" -o ~/.local/bin/coi
+curl -L "https://ghproxy.net/https://github.com/fuxm0818/coi-qa/releases/latest/download/coi-macos" -o ~/.local/bin/coi
 
 # Windows 代理下载
-Invoke-WebRequest -Uri "https://ghproxy.net/https://github.com/fuxm0818/coi/releases/latest/download/coi-windows.exe" -OutFile "$coiDir\coi.exe"
+Invoke-WebRequest -Uri "https://ghproxy.net/https://github.com/fuxm0818/coi-qa/releases/latest/download/coi-windows.exe" -OutFile "$coiDir\coi.exe"
 ```
 
 ### 3. 检查知识库
