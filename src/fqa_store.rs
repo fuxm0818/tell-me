@@ -223,7 +223,7 @@ mod tests {
         let fqa_file = FQAFile {
             version: 1,
             entries: vec![FQAEntry {
-                question: "什么是COI？".to_string(),
+                question: "什么是TELL-ME？".to_string(),
                 answer: "本地离线文档问答工具".to_string(),
                 embedding: vec![0.1, 0.2, 0.3],
                 created_at: "2024-01-01T12:00:00".to_string(),
