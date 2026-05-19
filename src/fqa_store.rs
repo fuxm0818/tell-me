@@ -235,7 +235,7 @@ mod tests {
 
         let store = FQAStore::new(&fqa_path).unwrap();
         assert_eq!(store.entries.len(), 1);
-        assert_eq!(store.entries[0].question, "什么是COI？");
+        assert_eq!(store.entries[0].question, "什么是TELL-ME？");
     }
 
     #[test]

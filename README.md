@@ -21,7 +21,7 @@ tell-me 让你指定一个本地文档文件夹，自动构建向量知识库，
 
 **Windows（PowerShell）：**
 ```powershell
-$tellMeDir = "$env:LOCALAPPDATA	ell-me"
+$tellMeDir = "$env:LOCALAPPDATA\tell-me"
 New-Item -ItemType Directory -Force -Path $tellMeDir | Out-Null
 Invoke-WebRequest -Uri "https://github.com/fuxm0818/tell-me/releases/latest/download/tell-me-x86_64-pc-windows-msvc.zip" -OutFile "$tellMeDir\tell-me.zip"
 Expand-Archive -Path "$tellMeDir\tell-me.zip" -DestinationPath $tellMeDir -Force
@@ -30,7 +30,7 @@ Expand-Archive -Path "$tellMeDir\tell-me.zip" -DestinationPath $tellMeDir -Force
 
 **如果下载失败，使用代理下载：**
 ```powershell
-$tellMeDir = "$env:LOCALAPPDATA	ell-me"
+$tellMeDir = "$env:LOCALAPPDATA\tell-me"
 New-Item -ItemType Directory -Force -Path $tellMeDir | Out-Null
 curl.exe -L "https://ghproxy.net/https://github.com/fuxm0818/tell-me/releases/latest/download/tell-me-x86_64-pc-windows-msvc.zip" -o "$tellMeDir\tell-me.zip"
 Expand-Archive -Path "$tellMeDir\tell-me.zip" -DestinationPath $tellMeDir -Force
