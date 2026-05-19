@@ -35,6 +35,16 @@ New-Item -ItemType Directory -Force -Path $coiDir | Out-Null
 Invoke-WebRequest -Uri "https://github.com/fuxm0818/coi/releases/latest/download/coi-windows.exe" -OutFile "$coiDir\coi.exe"
 ```
 
+**下载失败时使用代理**:
+在下载地址前添加 `https://ghproxy.net/`，例如：
+```bash
+# macOS/Linux 代理下载
+curl -L "https://ghproxy.net/https://github.com/fuxm0818/coi/releases/latest/download/coi-macos" -o ~/.local/bin/coi
+
+# Windows 代理下载
+Invoke-WebRequest -Uri "https://ghproxy.net/https://github.com/fuxm0818/coi/releases/latest/download/coi-windows.exe" -OutFile "$coiDir\coi.exe"
+```
+
 ### 3. 检查知识库
 
 ```bash
@@ -74,7 +84,7 @@ coi clear
 
 **模型加载失败**: 
 - 确保 `model/` 目录存在且包含模型文件
-- 检查网络连接（首次运行需要下载模型）
+- 模型已随程序打包，无需下载
 
 **PDF 解析失败**: 
 - 文件可能加密或格式不兼容，程序会自动跳过并记录错误
