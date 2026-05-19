@@ -139,10 +139,7 @@ pub fn handle_init(doc_path: &str, data_dir: &Path) -> Result<(), CoiError> {
     let mut vector_store = VectorStore::new(&vector_db_path);
     
     // 加载嵌入模型
-    let model_dir = data_dir
-        .parent()
-        .unwrap_or(data_dir)
-        .join("model");
+    let model_dir = data_dir.join("model");
     print_info("正在加载嵌入模型...");
     let embedding_service = EmbeddingService::new(&model_dir)?;
 

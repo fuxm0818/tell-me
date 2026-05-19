@@ -61,10 +61,7 @@ pub fn handle_ask(question: &str, data_dir: &Path) -> Result<(), CoiError> {
     }
 
     // 4. 加载嵌入模型，向量化用户问题
-    let model_dir = data_dir
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join("model");
+    let model_dir = data_dir.join("model");
 
     print_info(&format!("正在检索: {}", trimmed_question));
     

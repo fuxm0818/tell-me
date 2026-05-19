@@ -122,6 +122,8 @@ impl DocumentParser {
 
         // 在独立线程中运行 PDF 解析，捕获 panic
         let handle = std::thread::spawn(move || {
+            // 设置空的 panic hook 以避免打印 panic 信息
+            std::panic::set_hook(Box::new(|_| {}));
             // 使用 catch_unwind 捕获可能的 panic
             std::panic::catch_unwind(|| pdf_extract::extract_text(&path))
         });

@@ -17,3 +17,5 @@ coi_data/
 test-data/
 
 Cargo.lock
+
+temp/

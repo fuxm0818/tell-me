@@ -43,11 +43,8 @@ pub fn handle_add_fqa(question: &str, answer: &str, data_dir: &Path) -> Result<(
         })?;
     }
 
-    // 3. 初始化 EmbeddingService（model_dir 为 data_dir 的父目录下的 model/）
-    let model_dir = data_dir
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join("model");
+    // 3. 初始化 EmbeddingService
+    let model_dir = data_dir.join("model");
 
     let embedding_service = EmbeddingService::new(&model_dir)?;
 
