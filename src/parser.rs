@@ -122,16 +122,17 @@ impl DocumentParser {
 
         // 在独立线程中运行 PDF 解析，捕获 panic
         let handle = std::thread::spawn(move || {
-            pdf_extract::extract_text(&path)
+            // 使用 catch_unwind 捕获可能的 panic
+            std::panic::catch_unwind(|| pdf_extract::extract_text(&path))
         });
 
         match handle.join() {
-            Ok(Ok(content)) => Ok((content, None)),
-            Ok(Err(e)) => Err(CoiError::ParseError {
+            Ok(Ok(Ok(content))) => Ok((content, None)),
+            Ok(Ok(Err(e))) => Err(CoiError::ParseError {
                 file: name,
                 reason: format!("PDF 解析失败: {}", e),
             }),
-            Err(_) => Err(CoiError::ParseError {
+            Ok(Err(_)) | Err(_) => Err(CoiError::ParseError {
                 file: name,
                 reason: "PDF 解析失败: 文件格式不兼容（编码不支持）".to_string(),
             }),

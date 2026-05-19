@@ -432,7 +432,7 @@ mod tests {
     fn test_default_trait() {
         // 测试 Default trait 实现
         let scanner = DocumentScanner::default();
-        assert_eq!(scanner.supported_extensions.len(), 11);
+        assert_eq!(scanner.supported_extensions.len(), 14);
         assert_eq!(scanner.max_file_size, MAX_FILE_SIZE);
     }
 

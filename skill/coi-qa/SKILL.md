@@ -5,202 +5,91 @@ description: "我问你答（COI）本地离线文档问答工具。当用户提
 
 # 我问你答（COI）
 
-一个本地离线文档问答工具。用户指定文档文件夹，程序一次性构建向量知识库，之后可反复提问获得秒级响应。纯本地运行，不调用任何外部大模型，不上网。
+纯本地离线文档问答工具。用户指定文档文件夹，程序一次性构建向量知识库，之后可反复提问获得秒级响应。不调用外部大模型，不上网。
 
-支持文档格式：TXT、MD、PDF、DOCX、XLSX、CSV、PPTX、PPT、RTF
-
----
-
-## 当用户询问这个技能是什么时
-
-直接告诉用户：
-
-> 「我问你答」是一个本地离线文档问答工具。你只需要指定一个文档文件夹，它会自动构建知识库。之后你随时可以用自然语言提问，秒级返回答案。全程离线运行，不上传任何数据。
->
-> 如果你想开始使用，请告诉我你的文档文件夹路径。
-
-不要在用户只是询问时就开始安装。等用户明确表示要使用时再执行安装流程。
+**支持格式**: TXT、MD、PDF、DOCX、DOC、XLSX、XLS、CSV、PPTX、PPT、RTF、WPS、ET、DPS
 
 ---
 
-## 当用户要使用此工具时
+## 核心用法
 
-### 第 1 步：检查是否已安装（按顺序尝试以下路径）
-
-COI 可能已经安装在以下位置之一，按顺序检查：
+### 1. 检查是否已安装
 
 ```bash
-# 检查是否在 PATH 中
-which coi 2>/dev/null || where coi 2>/dev/null
-
-# 检查常见安装位置
-ls /usr/local/bin/coi 2>/dev/null
-ls ~/.local/bin/coi 2>/dev/null
-ls ~/coi 2>/dev/null
-ls ./coi 2>/dev/null
+which coi 2>/dev/null || ls ~/.local/bin/coi 2>/dev/null || ls ./coi 2>/dev/null
 ```
 
-**只要在任何位置找到了 coi 可执行文件，就不需要重新下载。** 记住找到的路径，后续直接用该路径执行。
+找到可执行文件后直接使用，未找到则下载安装。
 
-如果所有位置都找不到 → 执行第 2 步下载安装。
+### 2. 下载安装
 
-### 第 2 步：下载安装（仅在第 1 步确认不存在时执行）
-
-GitHub 仓库： `https://github.com/fuxm0818/coi`
-
-**安装到固定位置（避免每次会话重复下载）：**
-
-**Linux：**
+**macOS/Linux**:
 ```bash
-mkdir -p ~/.local/bin
-curl -L "https://github.com/fuxm0818/coi/releases/latest/download/coi-linux" -o ~/.local/bin/coi
-chmod +x ~/.local/bin/coi
-~/.local/bin/coi --help
+mkdir -p ~/.local/bin && curl -L "https://github.com/fuxm0818/coi/releases/latest/download/coi-$(uname | tr '[:upper:]' '[:lower:]')" -o ~/.local/bin/coi && chmod +x ~/.local/bin/coi
 ```
 
-**macOS：**
-```bash
-mkdir -p ~/.local/bin
-curl -L "https://github.com/fuxm0818/coi/releases/latest/download/coi-macos" -o ~/.local/bin/coi
-chmod +x ~/.local/bin/coi
-xattr -d com.apple.quarantine ~/.local/bin/coi 2>/dev/null
-~/.local/bin/coi --help
-```
-
-**Windows（PowerShell）：**
+**Windows**:
 ```powershell
 $coiDir = "$env:LOCALAPPDATA\coi"
 New-Item -ItemType Directory -Force -Path $coiDir | Out-Null
 Invoke-WebRequest -Uri "https://github.com/fuxm0818/coi/releases/latest/download/coi-windows.exe" -OutFile "$coiDir\coi.exe"
-& "$coiDir\coi.exe" --help
 ```
 
-**如果下载失败，使用代理下载：**
-```powershell
-$coiDir = "$env:LOCALAPPDATA\coi"
-New-Item -ItemType Directory -Force -Path $coiDir | Out-Null
-curl.exe -L "https://ghproxy.net/https://github.com/fuxm0818/coi/releases/latest/download/coi-windows.exe" -o "$coiDir\coi.exe"
-& "$coiDir\coi.exe" --help
-```
-
-安装完成后验证 `--help` 输出正常。
-
-### 第 3 步：检查是否已有知识库
+### 3. 检查知识库
 
 ```bash
 coi ask "测试"
 ```
+- 返回结果 → 知识库已存在，直接提问
+- 报错「尚未初始化」→ 需要初始化
 
-- 如果返回检索结果 → 知识库已存在，直接跳到第 5 步回答用户问题
-- 如果报错「尚未初始化」→ 执行第 4 步
-
-### 第 4 步：初始化知识库（仅在没有知识库时执行）
-
-询问用户：**「请告诉我你的文档文件夹路径，我来帮你构建知识库。」**
-
-等待用户提供路径后执行：
+### 4. 初始化知识库
 
 ```bash
-coi init <用户提供的路径>
+coi init /path/to/documents
 ```
 
-### 第 5 步：回答用户问题
+### 5. 问答
 
 ```bash
 coi ask "用户的问题"
 ```
 
-### 第 6 步：检查结果完整性
+### 6. 补充标准答案
 
-回答完用户问题后，**必须检查检索结果是否完整**：
+当检索结果不完整时，使用：
+```bash
+coi add-fqa "问题" "答案"
+```
 
-**如果检索结果为空或明显不完整**，应该主动告诉用户：
-
-> 「知识库中暂时没有找到完整答案。如果你知道答案，可以告诉我，我来帮你补充到标准答案库。下次再问类似问题就能直接返回了。」
-
-**如果用户补充了答案**，立即执行：
+### 7. 清空数据
 
 ```bash
-coi add-fqa "用户的问题" "用户的答案"
+coi clear
 ```
 
-**重要：用户提到知识库没有的信息时，必须主动询问是否要补充！**
-
 ---
 
-**如何正确解读检索结果：**
+## 问题处理
 
-COI 返回的是多条文档片段，每条都可能包含用户需要的信息。你必须：
+**模型加载失败**: 
+- 确保 `model/` 目录存在且包含模型文件
+- 检查网络连接（首次运行需要下载模型）
 
-1. **仔细阅读所有返回的片段**（通常 5 条），不要只看第 1 条
-2. **从多条结果中提取并合并信息** — 答案往往分散在不同片段中。比如用户问"有哪些产品"，产品 A 可能在第 1 条，产品 B 在第 3 条，产品 C 在第 4 条
-3. **不要只复述第 1 条结果** — 相似度最高不代表只有它有用，其他片段同样重要
-4. **整合后用自己的语言组织回答** — 把从多条片段中提取的信息整理成结构化的完整回答
-5. **如果信息不够完整，可以换个角度再问一次** — 用不同关键词执行第二次 `coi ask`，补充更多信息
+**PDF 解析失败**: 
+- 文件可能加密或格式不兼容，程序会自动跳过并记录错误
 
-**示例：** 用户问"酣客有哪些产品"，COI 返回 5 条结果：
-- 第 1 条提到"酣客标准版"
-- 第 3 条提到"酣客喜庆酒"
-- 第 4 条提到"酣客经典版（人脸瓶）"
+**大文件分块慢**:
+- 超过 1MB 的文件使用快速分块模式，最多生成 1000 个块
 
-正确做法：把三条中的产品信息合并，回答"酣客有标准版、喜庆酒、经典版等产品"。
-错误做法：只看第 1 条，回答"酣客有标准版"。
-
----
-
-## 执行流程总结
-
-```
-触发 skill
-  → 找到 coi 可执行文件了吗？
-     是 → 知识库存在吗？（试执行 coi ask "测试"）
-            是 → 回答问题 → 检查结果完整吗？
-                   是 → 结束
-                   否 → 询问用户补充 → add-fqa → 结束
-            否 → 问用户要文档路径 → init → 回答问题 → 检查结果完整性
-     否 → 下载安装到 ~/.local/bin → 问用户要文档路径 → init → 回答问题 → 检查结果完整性
-```
-
-**核心原则：不要重复做已经做过的事。已安装就不下载，已初始化就不重新 init。**
-
-**关键新增：遇到知识库没有的信息时，必须主动询问用户是否要补充到 FQA。**
-
----
-
-## FQA 标准答案补充
-
-**这是最重要的功能！当知识库检索结果不完整时，必须使用这个命令补充答案。**
-
-| 使用场景 | 执行命令 | 说明 |
-| -------- | -------- | ---- |
-| 知识库没有答案时 | `coi add-fqa "问题" "答案"` | 下次相似提问会优先返回此答案 |
-| 用户补充了正确答案 | `coi add-fqa "酣客有哪些产品" "酣客有标准版、喜庆酒..."` | 立即补充 |
-
-**示例场景：**
-- 用户问："酣客有哪些产品？"
-- 检索结果只有3个产品，但用户知道还有更多
-- → 主动询问："知识库中只找到3个产品，你知道还有其他系列吗？"
-- 用户回答："还有禧酱、醺客、老友、千人醉"
-- → 立即执行：`coi add-fqa "酣客有哪些产品" "酣客有标准版、喜庆酒、半月坛、家藏、留香、经典版、禧酱、醺客、老友、千人醉等"`
-
----
-
-## 其他操作
-
-| 用户意图 | 执行命令 | 说明 |
-| -------- | -------- | ---- |
-| 补充标准答案 | `coi add-fqa "问题" "答案"` | 下次相似提问会优先返回此答案 |
-| 清空重来 | `coi clear --yes` | 清空后需重新 init |
-| 文档有更新 | `coi init <路径>` | 重新执行 init 覆盖旧库 |
+**Windows 格式问题**:
+- DOC、XLS、PPT、WPS、ET、DPS 格式已支持
 
 ---
 
 ## 关键规则
 
-- `coi ask` 只读缓存，不扫描不重建，所以很快
-- 所有数据在 coi 同级的 `coi_data/` 目录
-- 安装完成后完全离线，不需要网络
-- **不要每次会话都重新下载安装，先检查是否已存在**
-- **不要每次都重新 init，先检查知识库是否已存在**
-- **当知识库结果不完整时，必须主动询问用户是否要补充到 FQA**
-- **用户补充答案后，立即执行 `add-fqa` 命令保存**
+- 已安装就不重复下载，已初始化就不重新 init
+- `coi ask` 只读缓存，速度快
+- 数据存放在 `coi_data/` 目录
+- 检索结果不完整时，必须主动询问用户是否补充到 FQA

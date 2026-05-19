@@ -1,9 +1,16 @@
 // 文本分块器模块
 // 实现智能分块策略，根据文档特征动态调整块大小和重叠
 // 支持按中文句子/段落边界优先切分
+// 针对大文件和日志类文件进行优化
 
 use std::collections::HashMap;
 use std::path::Path;
+
+/// 大文件阈值：超过此大小的文件使用快速分块模式
+const LARGE_FILE_THRESHOLD: usize = 1024 * 1024; // 1MB
+
+/// 单文件最大块数限制
+const MAX_CHUNKS_PER_FILE: usize = 1000;
 
 /// 文本块结构体，表示分块后的单个文本片段
 #[derive(Debug, Clone)]
@@ -360,16 +367,8 @@ impl ChunkSplitter {
         let chars: Vec<char> = text.chars().collect();
         let total_chars = chars.len();
 
-        // 分析文档并确定策略
-        let analysis = self.analyze_document(text, source_file);
-        let strategy = self.determine_chunk_strategy(&analysis, source_file);
-
-        let chunk_size = strategy.chunk_size;
-        let chunk_overlap = strategy.chunk_overlap;
-        let min_chunk_size = strategy.min_chunk_size;
-
-        // 文本长度不超过 chunk_size，作为单个块返回
-        if total_chars <= chunk_size {
+        // 文本长度不超过默认 chunk_size，作为单个块返回
+        if total_chars <= self.default_chunk_size {
             return vec![TextChunk {
                 content: text.to_string(),
                 source_file: source_file.to_string(),
@@ -377,6 +376,19 @@ impl ChunkSplitter {
                 token_count: (total_chars as f64 / 2.5) as usize,
             }];
         }
+
+        // 大文件优化：超过 1MB 的文件使用快速分块模式
+        if text.len() > LARGE_FILE_THRESHOLD {
+            return self.split_large_file(text, source_file);
+        }
+
+        // 分析文档并确定策略
+        let analysis = self.analyze_document(text, source_file);
+        let strategy = self.determine_chunk_strategy(&analysis, source_file);
+
+        let chunk_size = strategy.chunk_size;
+        let chunk_overlap = strategy.chunk_overlap;
+        let min_chunk_size = strategy.min_chunk_size;
 
         let mut chunks = Vec::new();
         let mut start = 0;
@@ -396,6 +408,9 @@ impl ChunkSplitter {
                     }
                 };
             }
+
+            // 确保 end 不超出范围
+            end = std::cmp::min(end, total_chars);
 
             // 构建块内容
             let content: String = chars[start..end].iter().collect();
@@ -420,11 +435,83 @@ impl ChunkSplitter {
             let step = if step == 0 { 1 } else { step };
             start += step;
             chunk_index += 1;
+
+            // 防止产生过多块
+            if chunk_index >= MAX_CHUNKS_PER_FILE {
+                break;
+            }
         }
 
         // 合并小块
         if strategy.merge_short_chunks && chunks.len() > 1 {
             chunks = self.merge_short_chunks(chunks, min_chunk_size);
+        }
+
+        chunks
+    }
+
+    /// 大文件快速分块方法
+    /// 对于超过 1MB 的文件，使用更简单快速的分块策略
+    fn split_large_file(&self, text: &str, source_file: &str) -> Vec<TextChunk> {
+        let (base_chunk_size, base_overlap) = self.get_chunk_params(source_file);
+        
+        // 大文件使用更大的 chunk 大小，减少块数
+        let chunk_size = std::cmp::max(base_chunk_size * 4, 2048);
+        let chunk_overlap = std::cmp::min(base_overlap * 2, 256);
+
+        let chars: Vec<char> = text.chars().collect();
+        let total_chars = chars.len();
+
+        let mut chunks = Vec::new();
+        let mut start = 0;
+        let mut chunk_index = 0;
+
+        while start < total_chars {
+            let mut end = std::cmp::min(start + chunk_size, total_chars);
+
+            // 对于大文件，只在换行符处切分，减少复杂度
+            if end < total_chars && end <= chars.len() {
+                // 向后查找最近的换行符
+                let search_start = std::cmp::max(start, start + chunk_size / 2);
+                for i in (search_start..end).rev() {
+                    if chars[i] == '\n' {
+                        end = i + 1;
+                        break;
+                    }
+                }
+            }
+
+            // 确保 end 不超出范围
+            end = std::cmp::min(end, chars.len());
+
+            // 构建块内容
+            let content: String = chars[start..end].iter().collect();
+            let trimmed_content = content.trim();
+
+            if !trimmed_content.is_empty() {
+                let token_count = (trimmed_content.len() as f64 / 2.5) as usize;
+                chunks.push(TextChunk {
+                    content: trimmed_content.to_string(),
+                    source_file: source_file.to_string(),
+                    chunk_index,
+                    token_count,
+                });
+            }
+
+            if end >= total_chars {
+                break;
+            }
+
+            // 计算下一块的起始位置
+            let step = chunk_size.saturating_sub(chunk_overlap);
+            let step = if step == 0 { 1 } else { step };
+            start += step;
+            chunk_index += 1;
+
+            // 防止产生过多块
+            if chunk_index >= MAX_CHUNKS_PER_FILE {
+                break;
+            }
         }
 
         chunks
