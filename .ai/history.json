@@ -1,0 +1,28 @@
+[
+  {
+    "id": "a3f7c9e1-2b4d-4e8a-b6c0-1d5f8a9e3b7c",
+    "question": "tell-me skill 在 OpenClaw 中使用存在三个问题：1.检测不到新版本 2.新会话重复要求初始化 3.GitHub下载失败缺少备选方案",
+    "plan": "修改 SKILL.md：1.添加版本检查逻辑对比本地和远程版本 2.新会话先检查已有数据不重复初始化 3.添加多个代理下载源和兜底方案",
+    "created_at": "2026-05-19T10:00:00",
+    "completed_at": "2026-05-19T10:05:00",
+    "ref_file_list": [
+      "skill/tell-me/SKILL.md"
+    ],
+    "change_list": [
+      { "file": "skill/tell-me/SKILL.md", "change": "重写整个文件：添加版本检查流程、会话恢复逻辑（不重复初始化）、多源下载方案（5个下载源+兜底方案）", "status": "modify" }
+    ]
+  },
+  {
+    "id": "b8e2d4f6-7a1c-49e3-a5d8-2c6f9b3e1a4d",
+    "question": "SKILL.md 对 Windows 平台适配不好，which/curl/ls 等命令在 Windows 不可用，路径也不对",
+    "plan": "全面跨平台适配：1.安装检查分 bash/powershell 两套 2.版本检查分平台 3.Windows下载改为循环尝试多源 4.会话恢复检查分平台 5.数据目录和兜底路径区分平台 6.网络排查命令区分平台",
+    "created_at": "2026-05-19T10:10:00",
+    "completed_at": "2026-05-19T10:15:00",
+    "ref_file_list": [
+      "skill/tell-me/SKILL.md"
+    ],
+    "change_list": [
+      { "file": "skill/tell-me/SKILL.md", "change": "全面跨平台适配：所有命令分 macOS/Linux 和 Windows 两套写法，Windows 使用 PowerShell 原生命令（Get-Command/Get-ChildItem/Invoke-WebRequest/Test-NetConnection），路径使用 %LOCALAPPDATA%，下载逻辑改为 foreach 循环自动尝试多源", "status": "modify" }
+    ]
+  }
+]
