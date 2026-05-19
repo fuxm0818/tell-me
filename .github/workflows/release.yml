@@ -6,7 +6,7 @@ on:
       - 'v*.*.*'
 
 env:
-  BINARY_NAME: coi
+  BINARY_NAME: tell-me
 
 permissions:
   contents: write

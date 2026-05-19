@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use crate::error::CoiError;
+use crate::error::TellMeError;
 
 /// 尝试多种编码读取文件内容
 fn read_file_with_fallback(file_path: &Path) -> Result<String, std::io::Error> {
@@ -56,7 +56,7 @@ impl DocumentParser {
     }
 
     /// 根据文件扩展名调用对应解析器
-    pub fn parse(&self, file_path: &Path) -> Result<ParseResult, CoiError> {
+    pub fn parse(&self, file_path: &Path) -> Result<ParseResult, TellMeError> {
         let file_name = file_path
             .file_name()
             .unwrap_or_default()
@@ -82,7 +82,7 @@ impl DocumentParser {
             "pptx" | "dps" => (self.parse_pptx(file_path, &file_name)?, None),
             "ppt" => (self.parse_ppt(file_path, &file_name)?, None),
             _ => {
-                return Err(CoiError::ParseError {
+                return Err(TellMeError::ParseError {
                     file: file_name,
                     reason: format!("不支持的文件格式: .{}", extension),
                 });
@@ -95,16 +95,16 @@ impl DocumentParser {
     }
 
     /// 解析 TXT 文件：尝试多种编码读取全部文本内容
-    fn parse_txt(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
-        read_file_with_fallback(file_path).map_err(|e| CoiError::ParseError {
+    fn parse_txt(&self, file_path: &Path, file_name: &str) -> Result<String, TellMeError> {
+        read_file_with_fallback(file_path).map_err(|e| TellMeError::ParseError {
             file: file_name.to_string(),
             reason: format!("读取文本文件失败: {}", e),
         })
     }
 
     /// 解析 MD 文件：尝试多种编码读取全部内容，保留标题层级结构
-    fn parse_md(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
-        read_file_with_fallback(file_path).map_err(|e| CoiError::ParseError {
+    fn parse_md(&self, file_path: &Path, file_name: &str) -> Result<String, TellMeError> {
+        read_file_with_fallback(file_path).map_err(|e| TellMeError::ParseError {
             file: file_name.to_string(),
             reason: format!("读取 Markdown 文件失败: {}", e),
         })
@@ -116,7 +116,7 @@ impl DocumentParser {
         &self,
         file_path: &Path,
         file_name: &str,
-    ) -> Result<(String, Option<usize>), CoiError> {
+    ) -> Result<(String, Option<usize>), TellMeError> {
         let path = file_path.to_path_buf();
         let name = file_name.to_string();
 
@@ -130,11 +130,11 @@ impl DocumentParser {
 
         match handle.join() {
             Ok(Ok(Ok(content))) => Ok((content, None)),
-            Ok(Ok(Err(e))) => Err(CoiError::ParseError {
+            Ok(Ok(Err(e))) => Err(TellMeError::ParseError {
                 file: name,
                 reason: format!("PDF 解析失败: {}", e),
             }),
-            Ok(Err(_)) | Err(_) => Err(CoiError::ParseError {
+            Ok(Err(_)) | Err(_) => Err(TellMeError::ParseError {
                 file: name,
                 reason: "PDF 解析失败: 文件格式不兼容（编码不支持）".to_string(),
             }),
@@ -142,13 +142,13 @@ impl DocumentParser {
     }
 
     /// 解析 DOCX 文件：使用 docx-rs 按段落顺序提取文本
-    fn parse_docx(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
-        let bytes = std::fs::read(file_path).map_err(|e| CoiError::ParseError {
+    fn parse_docx(&self, file_path: &Path, file_name: &str) -> Result<String, TellMeError> {
+        let bytes = std::fs::read(file_path).map_err(|e| TellMeError::ParseError {
             file: file_name.to_string(),
             reason: format!("读取 DOCX 文件失败: {}", e),
         })?;
 
-        let docx = docx_rs::read_docx(&bytes).map_err(|e| CoiError::ParseError {
+        let docx = docx_rs::read_docx(&bytes).map_err(|e| TellMeError::ParseError {
             file: file_name.to_string(),
             reason: format!("DOCX 解析失败: {}", e),
         })?;
@@ -176,8 +176,8 @@ impl DocumentParser {
         Ok(paragraphs.join("\n"))
     }
 
-    fn parse_doc(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
-        let doc = office_oxide::Document::open(file_path).map_err(|e| CoiError::ParseError {
+    fn parse_doc(&self, file_path: &Path, file_name: &str) -> Result<String, TellMeError> {
+        let doc = office_oxide::Document::open(file_path).map_err(|e| TellMeError::ParseError {
             file: file_name.to_string(),
             reason: format!("DOC 解析失败: {}", e),
         })?;
@@ -186,11 +186,11 @@ impl DocumentParser {
     }
 
     /// 解析 XLSX 文件：使用 calamine 逐 sheet、逐行提取单元格文本
-    fn parse_xlsx(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
+    fn parse_xlsx(&self, file_path: &Path, file_name: &str) -> Result<String, TellMeError> {
         use calamine::{open_workbook, Reader, Xlsx};
 
         let mut workbook: Xlsx<_> =
-            open_workbook(file_path).map_err(|e| CoiError::ParseError {
+            open_workbook(file_path).map_err(|e| TellMeError::ParseError {
                 file: file_name.to_string(),
                 reason: format!("XLSX 打开失败: {}", e),
             })?;
@@ -216,11 +216,11 @@ impl DocumentParser {
         Ok(all_text.join("\n"))
     }
 
-    fn parse_xls(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
+    fn parse_xls(&self, file_path: &Path, file_name: &str) -> Result<String, TellMeError> {
         use calamine::{open_workbook, Reader, Xls};
 
         let mut workbook: Xls<_> =
-            open_workbook(file_path).map_err(|e| CoiError::ParseError {
+            open_workbook(file_path).map_err(|e| TellMeError::ParseError {
                 file: file_name.to_string(),
                 reason: format!("XLS 打开失败: {}", e),
             })?;
@@ -247,12 +247,12 @@ impl DocumentParser {
     }
 
     /// 解析 CSV 文件：使用 csv crate 逐行提取各字段文本
-    fn parse_csv(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
+    fn parse_csv(&self, file_path: &Path, file_name: &str) -> Result<String, TellMeError> {
         let mut reader =
             csv::ReaderBuilder::new()
                 .has_headers(true)
                 .from_path(file_path)
-                .map_err(|e| CoiError::ParseError {
+                .map_err(|e| TellMeError::ParseError {
                     file: file_name.to_string(),
                     reason: format!("CSV 打开失败: {}", e),
                 })?;
@@ -277,7 +277,7 @@ impl DocumentParser {
                     }
                 }
                 Err(e) => {
-                    return Err(CoiError::ParseError {
+                    return Err(TellMeError::ParseError {
                         file: file_name.to_string(),
                         reason: format!("CSV 行解析失败: {}", e),
                     });
@@ -290,8 +290,8 @@ impl DocumentParser {
 
     /// 解析 RTF 文件：提取 RTF 文档中的纯文本内容
     /// RTF 格式中，可读文本以明文形式存储，控制字以 \ 开头
-    fn parse_rtf(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
-        let bytes = std::fs::read(file_path).map_err(|e| CoiError::ParseError {
+    fn parse_rtf(&self, file_path: &Path, file_name: &str) -> Result<String, TellMeError> {
+        let bytes = std::fs::read(file_path).map_err(|e| TellMeError::ParseError {
             file: file_name.to_string(),
             reason: format!("读取 RTF 文件失败: {}", e),
         })?;
@@ -402,7 +402,7 @@ impl DocumentParser {
         let final_cleaned = Self::clean_text(&cleaned);
         
         if final_cleaned.trim().is_empty() {
-            return Err(CoiError::ParseError {
+            return Err(TellMeError::ParseError {
                 file: file_name.to_string(),
                 reason: "RTF 文件内容为空或无法提取文本".to_string(),
             });
@@ -412,14 +412,14 @@ impl DocumentParser {
     }
 
     /// 解析 PPTX 文件：PPTX 本质上是 ZIP 压缩包，包含 XML 文件
-    fn parse_pptx(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
-        let bytes = std::fs::read(file_path).map_err(|e| CoiError::ParseError {
+    fn parse_pptx(&self, file_path: &Path, file_name: &str) -> Result<String, TellMeError> {
+        let bytes = std::fs::read(file_path).map_err(|e| TellMeError::ParseError {
             file: file_name.to_string(),
             reason: format!("读取 PPTX 文件失败: {}", e),
         })?;
 
         let cursor = std::io::Cursor::new(bytes);
-        let mut archive = zip::ZipArchive::new(cursor).map_err(|e| CoiError::ParseError {
+        let mut archive = zip::ZipArchive::new(cursor).map_err(|e| TellMeError::ParseError {
             file: file_name.to_string(),
             reason: format!("PPTX 文件损坏: {}", e),
         })?;
@@ -473,7 +473,7 @@ impl DocumentParser {
 
         let result = all_text.join("\n\n");
         if result.trim().is_empty() {
-            return Err(CoiError::ParseError {
+            return Err(TellMeError::ParseError {
                 file: file_name.to_string(),
                 reason: "PPTX 文件中未找到可提取的文本内容".to_string(),
             });
@@ -484,8 +484,8 @@ impl DocumentParser {
 
     /// 解析 PPT 文件：旧版 PowerPoint 格式（二进制）
     /// 由于 PPT 是二进制格式，尝试提取其中的文本片段
-    fn parse_ppt(&self, file_path: &Path, file_name: &str) -> Result<String, CoiError> {
-        let bytes = std::fs::read(file_path).map_err(|e| CoiError::ParseError {
+    fn parse_ppt(&self, file_path: &Path, file_name: &str) -> Result<String, TellMeError> {
+        let bytes = std::fs::read(file_path).map_err(|e| TellMeError::ParseError {
             file: file_name.to_string(),
             reason: format!("读取 PPT 文件失败: {}", e),
         })?;
@@ -538,7 +538,7 @@ impl DocumentParser {
         let result = text_parts.join("\n");
         
         if result.trim().is_empty() {
-            return Err(CoiError::ParseError {
+            return Err(TellMeError::ParseError {
                 file: file_name.to_string(),
                 reason: "PPT 文件中未找到可提取的文本内容（可能需要手动转换为 PPTX 格式）".to_string(),
             });
@@ -722,7 +722,7 @@ mod tests {
         let result = parser.parse(tmp.path());
 
         assert!(result.is_err());
-        if let Err(CoiError::ParseError { reason, .. }) = result {
+        if let Err(TellMeError::ParseError { reason, .. }) = result {
             assert!(reason.contains("不支持的文件格式"));
         }
     }
@@ -733,7 +733,7 @@ mod tests {
         let result = parser.parse(Path::new("/nonexistent/file.txt"));
 
         assert!(result.is_err());
-        if let Err(CoiError::ParseError { reason, .. }) = result {
+        if let Err(TellMeError::ParseError { reason, .. }) = result {
             assert!(reason.contains("读取文本文件失败"));
         }
     }

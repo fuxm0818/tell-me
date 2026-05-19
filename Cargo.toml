@@ -1,8 +1,8 @@
 [package]
-name = "coi"
+name = "tell-me"
 version = "0.1.0"
 edition = "2021"
-description = "COI - 我问你答：本地离线文档问答工具"
+description = "tell-me - 告诉我：本地离线文档问答工具"
 
 [dependencies]
 # CLI 框架

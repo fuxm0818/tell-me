@@ -1,5 +1,5 @@
 // 配置管理模块
-// 负责 coi_data/config.json 的读写
+// 负责 tell_me_data/config.json 的读写
 
 use std::path::{Path, PathBuf};
 
@@ -19,7 +19,7 @@ pub struct Config {
 /// 配置存储管理器
 /// 负责 config.json 文件的读写操作
 pub struct ConfigStore {
-    /// 配置文件的完整路径（如 coi_data/config.json）
+    /// 配置文件的完整路径（如 tell_me_data/config.json）
     config_path: PathBuf,
 }
 
@@ -35,12 +35,12 @@ impl ConfigStore {
     }
 
     /// 保存配置到文件
-    /// 如果 coi_data 目录不存在，会自动创建
+    /// 如果 tell_me_data 目录不存在，会自动创建
     ///
     /// # 参数
     /// - `config`: 要保存的配置数据
     pub fn save(&self, config: &Config) -> Result<()> {
-        // 自动创建父目录（coi_data/）
+        // 自动创建父目录（tell_me_data/）
         if let Some(parent) = self.config_path.parent() {
             if !parent.exists() {
                 std::fs::create_dir_all(parent)?;
@@ -78,7 +78,7 @@ mod tests {
     /// 测试配置保存和加载的往返一致性
     #[test]
     fn test_save_and_load_roundtrip() {
-        let temp_dir = std::env::temp_dir().join("coi_test_config_roundtrip");
+        let temp_dir = std::env::temp_dir().join("tell_me_test_config_roundtrip");
         let config_path = temp_dir.join("config.json");
 
         // 清理可能存在的旧测试数据
@@ -105,7 +105,7 @@ mod tests {
     /// 测试加载不存在的配置文件返回 None
     #[test]
     fn test_load_nonexistent_returns_none() {
-        let config_path = std::env::temp_dir().join("coi_test_nonexistent/config.json");
+        let config_path = std::env::temp_dir().join("tell_me_test_nonexistent/config.json");
 
         // 确保文件不存在
         let _ = fs::remove_file(&config_path);
@@ -118,7 +118,7 @@ mod tests {
     /// 测试 exists 方法
     #[test]
     fn test_exists() {
-        let temp_dir = std::env::temp_dir().join("coi_test_config_exists");
+        let temp_dir = std::env::temp_dir().join("tell_me_test_config_exists");
         let config_path = temp_dir.join("config.json");
 
         // 清理
@@ -144,11 +144,11 @@ mod tests {
     /// 测试 save 自动创建目录
     #[test]
     fn test_save_creates_parent_directory() {
-        let temp_dir = std::env::temp_dir().join("coi_test_auto_mkdir/nested/dir");
+        let temp_dir = std::env::temp_dir().join("tell_me_test_auto_mkdir/nested/dir");
         let config_path = temp_dir.join("config.json");
 
         // 确保目录不存在
-        let _ = fs::remove_dir_all(std::env::temp_dir().join("coi_test_auto_mkdir"));
+        let _ = fs::remove_dir_all(std::env::temp_dir().join("tell_me_test_auto_mkdir"));
 
         let store = ConfigStore::new(&config_path);
         let config = Config {
@@ -161,6 +161,6 @@ mod tests {
         assert!(config_path.exists());
 
         // 清理
-        let _ = fs::remove_dir_all(std::env::temp_dir().join("coi_test_auto_mkdir"));
+        let _ = fs::remove_dir_all(std::env::temp_dir().join("tell_me_test_auto_mkdir"));
     }
 }

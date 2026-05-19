@@ -3,9 +3,9 @@
 
 use clap::{Parser, Subcommand};
 
-/// COI 命令行工具主结构体
+/// TELL-ME 命令行工具主结构体
 #[derive(Parser)]
-#[command(name = "coi", about = "COI - 我问你答：本地离线文档问答工具")]
+#[command(name = "tell-me", about = "tell-me - 告诉我：本地离线文档问答工具")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,

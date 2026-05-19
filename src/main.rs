@@ -1,4 +1,4 @@
-// COI - 我问你答：本地离线文档问答工具
+// tell-me - 告诉我：本地离线文档问答工具
 // 主入口文件
 
 mod cli;
@@ -18,14 +18,14 @@ use std::path::PathBuf;
 use clap::Parser;
 use cli::{Cli, Commands};
 
-/// 获取 coi_data 目录路径（程序可执行文件同级目录下）
+/// 获取 tell_me_data 目录路径（程序可执行文件同级目录下）
 fn get_data_dir() -> PathBuf {
     let exe_dir = env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()))
         .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-    exe_dir.join("coi_data")
+    exe_dir.join("tell_me_data")
 }
 
 fn main() {

@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::config::{Config, ConfigStore};
 use crate::embedding::EmbeddingService;
-use crate::error::CoiError;
+use crate::error::TellMeError;
 use crate::parser::DocumentParser;
 use crate::scanner::{DocumentScanner, SkipInfo};
 use crate::splitter::{ChunkSplitter, TextChunk};
@@ -14,7 +14,7 @@ use crate::vector_store::VectorStore;
 
 /// 打印带前缀的信息
 fn print_info(message: &str) {
-    println!("[COI] {}", message);
+    println!("[TELL-ME] {}", message);
 }
 
 /// 打印进度条
@@ -23,7 +23,7 @@ fn print_progress(current: usize, total: usize, stage: &str) {
         return;
     }
     let percentage = (current as f64 / total as f64) * 100.0;
-    println!("[COI] {}: [{}/{}] {:.1}%", stage, current, total, percentage);
+    println!("[TELL-ME] {}: [{}/{}] {:.1}%", stage, current, total, percentage);
 }
 
 /// 处理 init 命令
@@ -37,26 +37,26 @@ fn print_progress(current: usize, total: usize, stage: &str) {
 ///
 /// # 参数
 /// - `doc_path`: 用户传入的文档文件夹路径
-/// - `data_dir`: coi_data 目录路径
-pub fn handle_init(doc_path: &str, data_dir: &Path) -> Result<(), CoiError> {
+/// - `data_dir`: tell_me_data 目录路径
+pub fn handle_init(doc_path: &str, data_dir: &Path) -> Result<(), TellMeError> {
     // 1. 验证路径是否存在且为目录
     let path = Path::new(doc_path);
     if !path.exists() || !path.is_dir() {
-        return Err(CoiError::InvalidPath {
+        return Err(TellMeError::InvalidPath {
             path: doc_path.to_string(),
         });
     }
 
     // 2. 转换为绝对路径
-    let abs_path = std::fs::canonicalize(path).map_err(|_| CoiError::InvalidPath {
+    let abs_path = std::fs::canonicalize(path).map_err(|_| TellMeError::InvalidPath {
         path: doc_path.to_string(),
     })?;
     let abs_path_str = abs_path.to_string_lossy().to_string();
 
-    // 3. 创建 coi_data 目录（如不存在）并保存配置
+    // 3. 创建 tell_me_data 目录（如不存在）并保存配置
     if !data_dir.exists() {
         std::fs::create_dir_all(data_dir).map_err(|e| {
-            CoiError::Other(anyhow::anyhow!("创建 coi_data 目录失败: {}", e))
+            TellMeError::Other(anyhow::anyhow!("创建 tell_me_data 目录失败: {}", e))
         })?;
     }
 
@@ -67,7 +67,7 @@ pub fn handle_init(doc_path: &str, data_dir: &Path) -> Result<(), CoiError> {
         last_init_time: chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
     };
     config_store.save(&config).map_err(|e| {
-        CoiError::Other(anyhow::anyhow!("保存配置失败: {}", e))
+        TellMeError::Other(anyhow::anyhow!("保存配置失败: {}", e))
     })?;
 
     print_info(&format!("文档路径: {}", abs_path_str));
@@ -75,7 +75,7 @@ pub fn handle_init(doc_path: &str, data_dir: &Path) -> Result<(), CoiError> {
     // 4. 扫描文档
     let scanner = DocumentScanner::new();
     let scan_result = scanner.scan(&abs_path).map_err(|e| {
-        CoiError::Other(anyhow::anyhow!("扫描文档失败: {}", e))
+        TellMeError::Other(anyhow::anyhow!("扫描文档失败: {}", e))
     })?;
 
     // 统计跳过的文件和目录
@@ -193,7 +193,7 @@ pub fn handle_init(doc_path: &str, data_dir: &Path) -> Result<(), CoiError> {
             }
             Err(e) => {
                 let reason = match &e {
-                    CoiError::ParseError { reason, .. } => reason.clone(),
+                    TellMeError::ParseError { reason, .. } => reason.clone(),
                     _ => e.to_string(),
                 };
                 failed_files.push((file_name.clone(), reason.clone()));
@@ -217,7 +217,7 @@ pub fn handle_init(doc_path: &str, data_dir: &Path) -> Result<(), CoiError> {
 
     // 完成向量库重建
     vector_store.complete_rebuild().map_err(|e| {
-        CoiError::Other(anyhow::anyhow!("向量库重建完成失败: {}", e))
+        TellMeError::Other(anyhow::anyhow!("向量库重建完成失败: {}", e))
     })?;
 
     println!();
@@ -244,7 +244,7 @@ fn process_batch(
     vector_store: &mut VectorStore,
     batch_chunks: &mut Vec<TextChunk>,
     total_chunks_processed: usize,
-) -> Result<(), CoiError> {
+) -> Result<(), TellMeError> {
     let batch_size = batch_chunks.len();
     
     // 向量化
@@ -253,7 +253,7 @@ fn process_batch(
 
     // 存储到向量库（增量添加）
     vector_store.add_chunks(batch_chunks, &embeddings).map_err(|e| {
-        CoiError::Other(anyhow::anyhow!("向量化存储失败: {}", e))
+        TellMeError::Other(anyhow::anyhow!("向量化存储失败: {}", e))
     })?;
 
     println!("    已处理 {} 个文本块（累计: {}）", batch_size, total_chunks_processed);

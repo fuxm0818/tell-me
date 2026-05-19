@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn test_save_and_reload() {
         let dir = tempdir().unwrap();
-        let fqa_path = dir.path().join("coi_data").join("fqa.json");
+        let fqa_path = dir.path().join("tell_me_data").join("fqa.json");
 
         let mut store = FQAStore::new(&fqa_path).unwrap();
         store.add("问题A", "答案A", vec![1.0, 0.0]).unwrap();

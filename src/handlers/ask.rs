@@ -6,13 +6,13 @@ use std::path::Path;
 
 use crate::config::ConfigStore;
 use crate::embedding::EmbeddingService;
-use crate::error::CoiError;
+use crate::error::TellMeError;
 use crate::fqa_store::{FQAStore, FQASearchConfig};
 use crate::vector_store::VectorStore;
 
 /// 打印带前缀的信息
 fn print_info(message: &str) {
-    println!("[COI] {}", message);
+    println!("[TELL-ME] {}", message);
 }
 
 /// 处理 ask 命令
@@ -27,12 +27,12 @@ fn print_info(message: &str) {
 ///
 /// # 参数
 /// - `question`: 用户提问内容
-/// - `data_dir`: coi_data 目录路径
-pub fn handle_ask(question: &str, data_dir: &Path) -> Result<(), CoiError> {
+/// - `data_dir`: tell_me_data 目录路径
+pub fn handle_ask(question: &str, data_dir: &Path) -> Result<(), TellMeError> {
     // 1. 验证问题非空白
     let trimmed_question = question.trim();
     if trimmed_question.is_empty() {
-        return Err(CoiError::InvalidInput {
+        return Err(TellMeError::InvalidInput {
             reason: "问题内容不能为空".to_string(),
         });
     }
@@ -42,21 +42,21 @@ pub fn handle_ask(question: &str, data_dir: &Path) -> Result<(), CoiError> {
     let config_store = ConfigStore::new(&config_path);
 
     if !config_store.exists() {
-        return Err(CoiError::NotInitialized);
+        return Err(TellMeError::NotInitialized);
     }
 
     let _config = config_store
         .load()
-        .map_err(|e| CoiError::Other(e))?
-        .ok_or(CoiError::NotInitialized)?;
+        .map_err(|e| TellMeError::Other(e))?
+        .ok_or(TellMeError::NotInitialized)?;
 
     // 3. 检查向量库是否存在
     let vector_db_path = data_dir.join("vector_db");
     let vector_store = VectorStore::new(&vector_db_path);
 
     if vector_store.is_empty() {
-        return Err(CoiError::InvalidInput {
-            reason: "向量库为空，请先执行 coi init 构建知识库".to_string(),
+        return Err(TellMeError::InvalidInput {
+            reason: "向量库为空，请先执行 tell-me init 构建知识库".to_string(),
         });
     }
 
@@ -71,12 +71,12 @@ pub fn handle_ask(question: &str, data_dir: &Path) -> Result<(), CoiError> {
     // 5. 检索向量库 Top 15（与Python版本保持一致）
     let doc_results = vector_store
         .query(&query_embedding, 15)
-        .map_err(|e| CoiError::Other(e))?;
+        .map_err(|e| TellMeError::Other(e))?;
 
     // 6. FQA 语义匹配（带相似度阈值过滤，默认0.85）
     let fqa_path = data_dir.join("fqa.json");
     let fqa_results = if fqa_path.exists() {
-        let fqa_store = FQAStore::new(&fqa_path).map_err(|e| CoiError::Other(e))?;
+        let fqa_store = FQAStore::new(&fqa_path).map_err(|e| TellMeError::Other(e))?;
         let config = FQASearchConfig {
             top_k: 3,
             similarity_threshold: 0.85,
@@ -131,7 +131,7 @@ pub fn handle_ask(question: &str, data_dir: &Path) -> Result<(), CoiError> {
     // 9. 无结果提示
     if !has_output {
         print_info("未找到相关内容。");
-        print_info("提示: 可能需要重新执行 'coi init' 更新向量库。");
+        print_info("提示: 可能需要重新执行 'tell-me init' 更新向量库。");
     }
 
     Ok(())

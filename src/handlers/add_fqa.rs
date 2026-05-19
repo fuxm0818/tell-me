@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use crate::embedding::EmbeddingService;
-use crate::error::CoiError;
+use crate::error::TellMeError;
 use crate::fqa_store::FQAStore;
 
 /// 处理 add-fqa 命令
@@ -14,24 +14,24 @@ use crate::fqa_store::FQAStore;
 /// # 参数
 /// - `question`: 用户问题
 /// - `answer`: 标准答案
-/// - `data_dir`: coi_data 目录路径
+/// - `data_dir`: tell_me_data 目录路径
 ///
 /// # 返回
 /// - `Ok(())`: 成功添加或更新
-/// - `Err(CoiError)`: 输入无效或其他错误
-pub fn handle_add_fqa(question: &str, answer: &str, data_dir: &Path) -> Result<(), CoiError> {
+/// - `Err(TellMeError)`: 输入无效或其他错误
+pub fn handle_add_fqa(question: &str, answer: &str, data_dir: &Path) -> Result<(), TellMeError> {
     // 1. 验证问题和答案非空白
     let question_trimmed = question.trim();
     let answer_trimmed = answer.trim();
 
     if question_trimmed.is_empty() {
-        return Err(CoiError::InvalidInput {
+        return Err(TellMeError::InvalidInput {
             reason: "问题不能为空白".to_string(),
         });
     }
 
     if answer_trimmed.is_empty() {
-        return Err(CoiError::InvalidInput {
+        return Err(TellMeError::InvalidInput {
             reason: "答案不能为空白".to_string(),
         });
     }
@@ -39,7 +39,7 @@ pub fn handle_add_fqa(question: &str, answer: &str, data_dir: &Path) -> Result<(
     // 2. 确保 data_dir 存在
     if !data_dir.exists() {
         std::fs::create_dir_all(data_dir).map_err(|e| {
-            CoiError::Other(anyhow::anyhow!("创建数据目录失败: {}", e))
+            TellMeError::Other(anyhow::anyhow!("创建数据目录失败: {}", e))
         })?;
     }
 
@@ -54,17 +54,17 @@ pub fn handle_add_fqa(question: &str, answer: &str, data_dir: &Path) -> Result<(
     // 5. 加载 FQAStore
     let fqa_path = data_dir.join("fqa.json");
     let mut fqa_store = FQAStore::new(&fqa_path).map_err(|e| {
-        CoiError::Other(anyhow::anyhow!("加载 FQA 存储失败: {}", e))
+        TellMeError::Other(anyhow::anyhow!("加载 FQA 存储失败: {}", e))
     })?;
 
     // 6. 添加/更新问答对
     let is_update = fqa_store.add(question_trimmed, answer_trimmed, embedding).map_err(|e| {
-        CoiError::Other(anyhow::anyhow!("添加问答对失败: {}", e))
+        TellMeError::Other(anyhow::anyhow!("添加问答对失败: {}", e))
     })?;
 
     // 7. 持久化保存
     fqa_store.save().map_err(|e| {
-        CoiError::Other(anyhow::anyhow!("保存 FQA 存储失败: {}", e))
+        TellMeError::Other(anyhow::anyhow!("保存 FQA 存储失败: {}", e))
     })?;
 
     // 8. 输出确认信息

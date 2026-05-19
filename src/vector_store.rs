@@ -75,7 +75,7 @@ impl VectorStore {
     /// 创建新的向量存储实例
     ///
     /// # 参数
-    /// - `db_path`: 向量数据库目录路径（如 coi_data/vector_db/）
+    /// - `db_path`: 向量数据库目录路径（如 tell_me_data/vector_db/）
     pub fn new(db_path: &Path) -> Self {
         let mut store = Self {
             db_path: db_path.to_path_buf(),
