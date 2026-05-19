@@ -20,3 +20,5 @@ Cargo.lock
 
 temp/
 skill/coi-qa.zip
+
+.ai/
