@@ -10,6 +10,12 @@ use crate::error::TellMeError;
 use crate::fqa_store::{FQAStore, FQASearchConfig};
 use crate::vector_store::VectorStore;
 
+/// FQA 相似度阈值（匹配到 >= 此值时直接响应，不查询向量库）
+const FQA_THRESHOLD: f32 = 0.8;
+
+/// 向量库相似度阈值（FQA 未匹配时使用）
+const VECTOR_DB_THRESHOLD: f32 = 0.6;
+
 /// 打印带前缀的信息
 fn print_info(message: &str) {
     println!("[TELL-ME] {}", message);
@@ -21,9 +27,9 @@ fn print_info(message: &str) {
 /// 1. 验证问题非空白
 /// 2. 加载配置，验证已初始化
 /// 3. 检查向量库是否存在
-/// 4. 向量化用户问题，检索 Top 15
-/// 5. FQA 语义匹配（带相似度阈值过滤，默认0.85）
-/// 6. 双源合并展示结果（按相似度排序）
+/// 4. 向量化用户问题
+/// 5. 先查询 FQA（阈值 0.8），匹配到则直接响应
+/// 6. FQA 未匹配时，查询向量库（阈值 0.6）
 ///
 /// # 参数
 /// - `question`: 用户提问内容
@@ -68,18 +74,13 @@ pub fn handle_ask(question: &str, data_dir: &Path) -> Result<(), TellMeError> {
     let embedding_service = EmbeddingService::new(&model_dir)?;
     let query_embedding = embedding_service.encode(trimmed_question)?;
 
-    // 5. 检索向量库 Top 15（与Python版本保持一致）
-    let doc_results = vector_store
-        .query(&query_embedding, 15)
-        .map_err(|e| TellMeError::Other(e))?;
-
-    // 6. FQA 语义匹配（带相似度阈值过滤，默认0.85）
+    // 5. 先查询 FQA（阈值 0.8）
     let fqa_path = data_dir.join("fqa.json");
     let fqa_results = if fqa_path.exists() {
         let fqa_store = FQAStore::new(&fqa_path).map_err(|e| TellMeError::Other(e))?;
         let config = FQASearchConfig {
             top_k: 3,
-            similarity_threshold: 0.85,
+            similarity_threshold: FQA_THRESHOLD,
             enable_threshold: true,
         };
         fqa_store.search_with_config(&query_embedding, &config)
@@ -89,26 +90,27 @@ pub fn handle_ask(question: &str, data_dir: &Path) -> Result<(), TellMeError> {
 
     println!();
 
-    let mut has_output = false;
-
-    // 7. FQA 部分输出（参考Python版本格式）
+    // 6. 如果 FQA 匹配到结果，直接响应并返回（不查询向量库）
     if !fqa_results.is_empty() {
-        has_output = true;
         println!("═══ 标准答案（FQA）═══");
         for result in &fqa_results {
             println!("  相似度: {:.2}", result.score);
             println!("  问题: {}", result.question);
             println!("  答案: {}", result.answer);
         }
-        println!();
+        return Ok(());
     }
 
-    // 8. 文档检索部分输出（按文件分组显示，参考Python版本）
+    // 7. FQA 未匹配，查询向量库（阈值 0.6）
+    let mut doc_results = vector_store
+        .query(&query_embedding, 15)
+        .map_err(|e| TellMeError::Other(e))?;
+    doc_results.retain(|r| r.score >= VECTOR_DB_THRESHOLD);
+
+    // 8. 文档检索部分输出（按文件分组显示）
     if !doc_results.is_empty() {
-        has_output = true;
         println!("═══ 文档检索结果 ═══");
         
-        // 按文件分组
         let mut grouped: HashMap<String, Vec<(f32, String)>> = HashMap::new();
         for result in &doc_results {
             grouped
@@ -126,10 +128,7 @@ pub fn handle_ask(question: &str, data_dir: &Path) -> Result<(), TellMeError> {
             }
             println!();
         }
-    }
-
-    // 9. 无结果提示
-    if !has_output {
+    } else {
         print_info("未找到相关内容。");
         print_info("提示: 可能需要重新执行 'tell-me init' 更新向量库。");
     }
